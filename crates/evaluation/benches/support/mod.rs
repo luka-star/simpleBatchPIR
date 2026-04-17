@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use rand::{seq::index::sample, Rng};
 use shared::models::Band;
 use std::env;
@@ -56,4 +58,29 @@ pub async fn make_bands(nr_bands: usize) -> Result<Vec<Band>, Error> {
         .collect();
 
     Ok(bands)
+}
+
+pub fn assert_requested_band_count(requested: usize, actual: usize) {
+    assert_eq!(
+        actual, requested,
+        "expected {requested} bands from benchmark fixture, got {actual}"
+    );
+}
+
+pub fn random_idx(upper: usize) -> usize {
+    assert!(upper > 0, "upper bound must be positive");
+    rand::rng().random_range(0..upper)
+}
+
+pub fn random_index_list(count: usize, upper: usize) -> Vec<usize> {
+    assert!(
+        count <= upper,
+        "cannot sample {count} unique indices from upper bound {upper}"
+    );
+
+    if count == 0 {
+        return Vec::new();
+    }
+
+    sample(&mut rand::rng(), upper, count).into_vec()
 }

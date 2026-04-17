@@ -1,8 +1,8 @@
 use ndarray::{Array1, Array2};
 use shared::compute_a;
-use shared::keyword::{KeywordClosure, RecordFetchRequest};
+use shared::keyword::KeywordClosure;
 use shared::rings::Zq;
-use shared::tokenize_text;
+use shared::{tokenize_text, RecordFetchRequest};
 
 use super::plain::{recover_single, single_query};
 
