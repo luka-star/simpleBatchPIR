@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Rust Test",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test",
+                    "test_batch_query_integration",
+                    "--no-run"
+                ]
+            },
+            "args": [
+                "test_batch_pir_pipeline",
+                "--nocapture"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "RUST_BACKTRACE": "1"
+            }
+        }
+    ]
+}

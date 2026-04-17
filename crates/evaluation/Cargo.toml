@@ -1,0 +1,41 @@
+[package]
+name = "evaluation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+shared = { path = "../shared" }
+server_pir = { path = "../server_PIR" }
+client = { path = "../client" }
+tokio = { version = "1", features = ["full"] }
+tokio-postgres = "0.7"
+criterion = { version = "0.5", features = ["csv_output"] }
+ndarray = "0.16"
+serde = { version = "1.0", features = ["derive"] }
+once_cell = "1.18"
+rand = "0.9"
+
+[[bench]]
+name = "querying"
+path = "benches/querying.rs"
+harness = false
+
+[[bench]]
+name = "offline_setup"
+path = "benches/offline_setup.rs"
+harness = false
+
+[[bench]]
+name = "auxiliary"
+path = "benches/auxiliary.rs"
+harness = false
+
+[[bench]]
+name = "multiple_query"
+path = "benches/multiple_query.rs"
+harness = false
+
+[[bench]]
+name = "batching_vars"
+path = "benches/batching_vars.rs"
+harness = false

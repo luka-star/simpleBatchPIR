@@ -1,0 +1,13 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] } 
+ndarray = "0.16"
+shared = { path = "../shared" }
+rand = "0.9"
+rand_chacha = "0.9"
+rand_distr = "0.5" 

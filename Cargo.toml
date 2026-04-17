@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "crates/client",
+    "crates/server_PIR",
+    "crates/shared",
+    "crates/evaluation",
+]
