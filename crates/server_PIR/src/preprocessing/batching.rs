@@ -6,24 +6,7 @@ use shared::rings::{lift_matrix_to_zq, Zp, Zq};
 use std::collections::HashMap;
 use std::num::Wrapping;
 
-pub struct SetupResult {
-    pub hint_s: (),
-    pub hint_c: Array2<Zq>,
-}
-
-pub fn setup(db: &Array2<Zp>) -> SetupResult {
-    let nrows = db.nrows();
-    let matrix: Array2<Zq> = compute_a(nrows);
-    setup_with_matrix(db, &matrix)
-}
-
-fn setup_with_matrix(db: &Array2<Zp>, matrix: &Array2<Zq>) -> SetupResult {
-    let db_lifted: Array2<Zq> = lift_matrix_to_zq(db);
-
-    let hint_c = db_lifted.dot(matrix);
-
-    SetupResult { hint_s: (), hint_c }
-}
+use super::plain::{setup_with_matrix, SetupResult};
 
 pub fn batching_encode(db: &[Band],config: &PBCConfig) -> (Vec<Vec<Band>>, HashMap<(usize, usize), usize>) {
     let b = config.buckets;
@@ -44,7 +27,7 @@ pub fn batching_encode(db: &[Band],config: &PBCConfig) -> (Vec<Vec<Band>>, HashM
     (buckets, position_map)
 }
 
-pub fn setup_batching(db: &[Band],config: &PBCConfig) -> (Vec<SetupResult>,HashMap<(usize, usize), usize>,Vec<Array2<Zp>>,Vec<Array2<Zq>>) {
+pub fn setup_batching(db: &[Band],config: &PBCConfig) -> (Vec<SetupResult>,HashMap<(usize, usize), usize>,Vec<Array2<Zp>>,Vec<Array2<Zq>>,) {
     let (buckets, position_map) = batching_encode(db, config);
     let mut setup_res: Vec<SetupResult> = Vec::with_capacity(buckets.len());
     let mut encode_buckets: Vec<Array2<Zp>> = Vec::with_capacity(buckets.len());
@@ -53,8 +36,10 @@ pub fn setup_batching(db: &[Band],config: &PBCConfig) -> (Vec<SetupResult>,HashM
         let matrix: Array2<Zp> = Band::bands_to_matrix(bucket_data);
         encode_buckets.push(matrix);
     }
+
     let padded_buckets = pad_buckets(encode_buckets);
     let lifted_buckets: Vec<Array2<Zq>> = padded_buckets.iter().map(lift_matrix_to_zq).collect();
+
     if let Some(first_bucket) = padded_buckets.first() {
         let matrix = compute_a(first_bucket.nrows());
         for bucket in &padded_buckets {

@@ -1,0 +1,12 @@
+[package]
+name = "oprf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+blake3 = "1"
+rand = { version = "0.8", features = ["small_rng"] }
+hex ="0.4"
+
+[lib]
+path = "src/prf.rs"

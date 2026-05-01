@@ -2,6 +2,7 @@ use crate::models::Band;
 use crate::rings::Zp;
 use boomphf::Mphf;
 use ndarray::Array2;
+use oprf::{encode_keyword, eval_keyword, OprfKey, DEFAULT_M};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::num::Wrapping;
@@ -51,21 +52,45 @@ impl PerfectHash {
 pub struct KeywordIndex {
     pub perfect_hash: PerfectHash,
     pub matrix: Array2<Zp>,
-    pub block_entry_count: usize,
+    pub record_size: usize,
+    pub entry_width_bytes: usize,
+    pub eof: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct SecureKeywordIndex {
+    pub perfect_hash: PerfectHash,
+    pub matrix: Array2<Zp>,
+    pub record_size: usize,
     pub entry_width_bytes: usize,
     pub eof: u16,
 }
 
 impl KeywordIndex {
-    pub fn side_len(&self) -> usize {
+    pub fn square_n(&self) -> usize {
         self.matrix.nrows()
     }
 
     pub fn closure(&self) -> KeywordClosure {
         KeywordClosure {
             perfect_hash: self.perfect_hash.clone(),
-            side_len: self.side_len(),
-            block_entry_count: self.block_entry_count,
+            square_n: self.square_n(),
+            record_size: self.record_size,
+            eof: self.eof,
+        }
+    }
+}
+
+impl SecureKeywordIndex {
+    pub fn square_n(&self) -> usize {
+        self.matrix.nrows()
+    }
+
+    pub fn closure(&self) -> SecureKeywordClosure {
+        SecureKeywordClosure {
+            perfect_hash: self.perfect_hash.clone(),
+            square_n: self.square_n(),
+            record_size: self.record_size,
             eof: self.eof,
         }
     }
@@ -74,8 +99,16 @@ impl KeywordIndex {
 #[derive(Debug, Clone)]
 pub struct KeywordClosure {
     pub perfect_hash: PerfectHash,
-    pub side_len: usize,
-    pub block_entry_count: usize,
+    pub square_n: usize,
+    pub record_size: usize,
+    pub eof: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct SecureKeywordClosure {
+    pub perfect_hash: PerfectHash,
+    pub square_n: usize,
+    pub record_size: usize,
     pub eof: u16,
 }
 
@@ -85,7 +118,21 @@ impl KeywordClosure {
     }
 
     pub fn block_cell_count(&self) -> usize {
-        self.block_entry_count * 2
+        self.record_size * 2
+    }
+
+    pub fn block_start_cell_for(&self, keyword: &str) -> usize {
+        self.slot_for(keyword) * self.block_cell_count()
+    }
+}
+
+impl SecureKeywordClosure {
+    pub fn slot_for(&self, keyword: &str) -> usize {
+        self.perfect_hash.slot(keyword)
+    }
+
+    pub fn block_cell_count(&self) -> usize {
+        self.record_size * 2
     }
 
     pub fn block_start_cell_for(&self, keyword: &str) -> usize {
@@ -171,7 +218,7 @@ pub fn construct_keyword_mapping(db: &[Band]) -> HashMap<String, Vec<RecordId>> 
     mapping
 }
 
-pub fn collect_keywords(mapping: &HashMap<String, Vec<usize>>) -> Vec<String> {
+pub fn collect_keywords<T>(mapping: &HashMap<String, T>) -> Vec<String> {
     let mut keywords: Vec<String> = mapping.keys().cloned().collect();
     keywords.sort_unstable();
     keywords
@@ -196,9 +243,9 @@ pub fn build_perfect_hash(keywords: &[String]) -> PerfectHash {
     }
 }
 
-fn pack_posting_block(postings: &[RecordId], block_entry_count: usize, eof: u16) -> Vec<Zp> {
+fn pack_posting_block(postings: &[RecordId], record_size: usize, eof: u16) -> Vec<Zp> {
     assert!(
-        postings.len() < block_entry_count,
+        postings.len() < record_size,
         "posting list does not fit into the fixed-size block"
     );
 
@@ -207,9 +254,9 @@ fn pack_posting_block(postings: &[RecordId], block_entry_count: usize, eof: u16)
         .map(|posting| u16::try_from(*posting).expect("posting index exceeds u16"))
         .collect();
     entries.push(eof);
-    entries.resize(block_entry_count, eof);
+    entries.resize(record_size, eof);
 
-    let mut block = Vec::with_capacity(block_entry_count * 2);
+    let mut block = Vec::with_capacity(record_size * 2);
     for entry in entries {
         let bytes = entry.to_le_bytes();
         block.push(Wrapping(bytes[0]));
@@ -220,15 +267,48 @@ fn pack_posting_block(postings: &[RecordId], block_entry_count: usize, eof: u16)
 
 pub fn build_posting_blocks(mapping: &HashMap<String, Vec<RecordId>>,perfect_hash: &PerfectHash,eof: u16) -> (Vec<Vec<Zp>>, usize) {
     let max_posting_len = mapping.values().map(|posts| posts.len()).max().unwrap_or(0);
-    let block_entry_count = max_posting_len.saturating_add(1);
-    let mut blocks = vec![pack_posting_block(&[], block_entry_count, eof); perfect_hash.table_size];
+    let record_size = max_posting_len.saturating_add(1);
+    let mut blocks = vec![pack_posting_block(&[], record_size, eof); perfect_hash.table_size];
 
     for (keyword, postings) in mapping {
         let slot = perfect_hash.slot(keyword);
-        blocks[slot] = pack_posting_block(postings, block_entry_count, eof);
+        blocks[slot] = pack_posting_block(postings, record_size, eof);
     }
 
-    (blocks, block_entry_count)
+    (blocks, record_size)
+}
+
+fn build_masked_posting_blocks(mapping: &HashMap<String, Vec<RecordId>>,oprf_key: &OprfKey,eof: u16) -> (HashMap<String, Vec<Zp>>, usize) {
+    let max_posting_len = mapping.values().map(|posts| posts.len()).max().unwrap_or(0);
+    let record_size = max_posting_len.saturating_add(1);
+    let block_cell_count = record_size * 2;
+    let mut masked_mapping = HashMap::with_capacity(mapping.len());
+
+    for (keyword, postings) in mapping {
+        let input = encode_keyword(keyword, DEFAULT_M);
+        let token = eval_keyword(&oprf_key.row1[input.x1], &oprf_key.row2[input.x2], input, block_cell_count);
+        let block = pack_posting_block(postings, record_size, eof);
+        let masked_block: Vec<Zp> = block
+            .into_iter()
+            .zip(token.p_hat.into_iter())
+            .map(|(cell, mask)| Wrapping(cell.0 ^ mask))
+            .collect();
+
+        masked_mapping.insert(token.x_hat, masked_block);
+    }
+
+    (masked_mapping, record_size)
+}
+
+fn pack_prebuilt_blocks(mapping: &HashMap<String, Vec<Zp>>,perfect_hash: &PerfectHash,block_cell_count: usize) -> Vec<Vec<Zp>> {
+    let mut blocks = vec![vec![Wrapping(0); block_cell_count]; perfect_hash.table_size];
+
+    for (keyword, block) in mapping {
+        let slot = perfect_hash.slot(keyword);
+        blocks[slot] = block.clone();
+    }
+
+    blocks
 }
 
 pub fn pack_keyword_blocks_into_square_matrix(blocks: &[Vec<Zp>]) -> Array2<Zp> {
@@ -247,13 +327,31 @@ pub fn build_keyword_index(db: &[Band]) -> KeywordIndex {
     let keywords = collect_keywords(&mapping);
     let perfect_hash = build_perfect_hash(&keywords);
     let eof = u16::MAX;
-    let (blocks, block_entry_count) = build_posting_blocks(&mapping, &perfect_hash, eof);
+    let (blocks, record_size) = build_posting_blocks(&mapping, &perfect_hash, eof);
     let matrix = pack_keyword_blocks_into_square_matrix(&blocks);
 
     KeywordIndex {
         perfect_hash,
         matrix,
-        block_entry_count,
+        record_size,
+        entry_width_bytes: 2,
+        eof,
+    }
+}
+
+pub fn build_secure_keyword_index(db: &[Band], oprf_key: &OprfKey) -> SecureKeywordIndex {
+    let mapping = construct_keyword_mapping(db);
+    let eof = u16::MAX;
+    let (masked_mapping, record_size) = build_masked_posting_blocks(&mapping, oprf_key, eof);
+    let secure_keywords = collect_keywords(&masked_mapping);
+    let perfect_hash = build_perfect_hash(&secure_keywords);
+    let blocks = pack_prebuilt_blocks(&masked_mapping, &perfect_hash, record_size * 2);
+    let matrix = pack_keyword_blocks_into_square_matrix(&blocks);
+
+    SecureKeywordIndex {
+        perfect_hash,
+        matrix,
+        record_size,
         entry_width_bytes: 2,
         eof,
     }
