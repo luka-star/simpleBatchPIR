@@ -14,7 +14,7 @@ pub struct PrfInput {
     pub x2: usize,
 }
 
-pub fn eval(left_key: &GKey,right_key: &GKey,input: PrfInput,out_len: usize) -> Vec<u8> {
+pub fn eval(left_key: &GKey, right_key: &GKey, input: PrfInput, out_len: usize) -> Vec<u8> {
     let left = eval_g(left_key, input, out_len);
     let right = eval_g(right_key, input, out_len);
 
