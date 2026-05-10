@@ -1,8 +1,5 @@
 use super::OtKey;
-use pqc_kyber::{
-    indcpa::{indcpa_dec, indcpa_enc, indcpa_keypair},
-    KyberError, KYBER_CIPHERTEXTBYTES, KYBER_PUBLICKEYBYTES, KYBER_SECRETKEYBYTES, KYBER_SYMBYTES,
-};
+use pqc_kyber::*;
 use rand::CryptoRng;
 use rand::RngCore;
 
@@ -33,13 +30,13 @@ pub struct KyberEndemicOtSenderMessage {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KyberEndemicOtSenderOutput {
-    pub k_0: OtKey,
-    pub k_1: OtKey,
+    pub o_0: OtKey,
+    pub o_1: OtKey,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KyberEndemicOtReceiverOutput {
-    pub k_b: OtKey,
+    pub o_b: OtKey,
 }
 
 #[derive(Debug, Clone)]
@@ -56,14 +53,11 @@ impl KyberEndemicOtReceiver {
         choice: bool,
         rng: &mut (impl RngCore + CryptoRng),
     ) -> Result<(Self, KyberEndemicOtReceiverMessage), KyberEndemicOtError> {
-        let mut pk_real = [0u8; KYBER_PUBLICKEYBYTES];
-        let mut sk = [0u8; KYBER_SECRETKEYBYTES];
         let mut r_other = [0u8; KYBER_PUBLICKEYBYTES];
-
-        indcpa_keypair(&mut pk_real, &mut sk, None, rng)?;
         rng.fill_bytes(&mut r_other);
+        let kyber_keys = keypair(rng)?;
 
-        let r_chosen = xor_public_keys(&pk_real, &hash_to_public_key_mask(&r_other));
+        let r_chosen = xor_public_keys(&kyber_keys.public, &hash_to_public_key_mask(&r_other));
         let (r_0, r_1) = if choice {
             (r_other, r_chosen)
         } else {
@@ -71,7 +65,10 @@ impl KyberEndemicOtReceiver {
         };
 
         Ok((
-            Self { choice, sk },
+            Self {
+                choice,
+                sk: kyber_keys.secret,
+            },
             KyberEndemicOtReceiverMessage { r_0, r_1 },
         ))
     }
@@ -85,11 +82,10 @@ impl KyberEndemicOtReceiver {
         } else {
             &sender_msg.ct_0
         };
-        let mut k_b = [0u8; KYBER_SYMBYTES];
 
-        indcpa_dec(&mut k_b, ciphertext, &self.sk);
+        let o_b = decapsulate(ciphertext, &self.sk)?;
 
-        Ok(KyberEndemicOtReceiverOutput { k_b })
+        Ok(KyberEndemicOtReceiverOutput { o_b })
     }
 }
 
@@ -99,18 +95,6 @@ impl KyberEndemicOtSender {
         rng: &mut (impl RngCore + CryptoRng),
     ) -> Result<(KyberEndemicOtSenderMessage, KyberEndemicOtSenderOutput), KyberEndemicOtError>
     {
-        let mut k_0 = [0u8; KYBER_SYMBYTES];
-        let mut k_1 = [0u8; KYBER_SYMBYTES];
-        let mut coins_0 = [0u8; KYBER_SYMBYTES];
-        let mut coins_1 = [0u8; KYBER_SYMBYTES];
-        let mut ct_0 = [0u8; KYBER_CIPHERTEXTBYTES];
-        let mut ct_1 = [0u8; KYBER_CIPHERTEXTBYTES];
-
-        rng.fill_bytes(&mut k_0);
-        rng.fill_bytes(&mut k_1);
-        rng.fill_bytes(&mut coins_0);
-        rng.fill_bytes(&mut coins_1);
-
         let pk_0 = xor_public_keys(
             &receiver_msg.r_0,
             &hash_to_public_key_mask(&receiver_msg.r_1),
@@ -120,12 +104,12 @@ impl KyberEndemicOtSender {
             &hash_to_public_key_mask(&receiver_msg.r_0),
         );
 
-        indcpa_enc(&mut ct_0, &k_0, &pk_0, &coins_0);
-        indcpa_enc(&mut ct_1, &k_1, &pk_1, &coins_1);
+        let (ct_0, o_0) = encapsulate(&pk_0, rng)?;
+        let (ct_1, o_1) = encapsulate(&pk_1, rng)?;
 
         Ok((
             KyberEndemicOtSenderMessage { ct_0, ct_1 },
-            KyberEndemicOtSenderOutput { k_0, k_1 },
+            KyberEndemicOtSenderOutput { o_0, o_1 },
         ))
     }
 }
@@ -169,8 +153,8 @@ mod tests {
             KyberEndemicOtSender::respond(&receiver_msg, &mut rng).unwrap();
         let receiver_output = receiver.recover_message(&sender_msg).unwrap();
 
-        assert_eq!(receiver_output.k_b, sender_output.k_0);
-        assert_ne!(receiver_output.k_b, sender_output.k_1);
+        assert_eq!(receiver_output.o_b, sender_output.o_0);
+        assert_ne!(receiver_output.o_b, sender_output.o_1);
     }
 
     #[test]
@@ -181,8 +165,8 @@ mod tests {
             KyberEndemicOtSender::respond(&receiver_msg, &mut rng).unwrap();
         let receiver_output = receiver.recover_message(&sender_msg).unwrap();
 
-        assert_eq!(receiver_output.k_b, sender_output.k_1);
-        assert_ne!(receiver_output.k_b, sender_output.k_0);
+        assert_eq!(receiver_output.o_b, sender_output.o_1);
+        assert_ne!(receiver_output.o_b, sender_output.o_0);
     }
 
     #[test]
@@ -198,11 +182,11 @@ mod tests {
             let receiver_output = receiver.recover_message(&sender_msg).unwrap();
 
             if choice {
-                assert_eq!(receiver_output.k_b, sender_output.k_1);
+                assert_eq!(receiver_output.o_b, sender_output.o_1);
             } else {
-                assert_eq!(receiver_output.k_b, sender_output.k_0);
+                assert_eq!(receiver_output.o_b, sender_output.o_0);
             }
-            assert_ne!(sender_output.k_0, sender_output.k_1);
+            assert_ne!(sender_output.o_0, sender_output.o_1);
         }
     }
 }

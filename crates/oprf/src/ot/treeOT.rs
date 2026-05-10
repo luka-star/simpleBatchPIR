@@ -114,7 +114,7 @@ impl TreeOtReceiver {
             .into_iter()
             .zip(&sender_msg.base_messages)
         {
-            keys.push(receiver.recover_message(base_msg)?.k_b);
+            keys.push(receiver.recover_message(base_msg)?.o_b);
         }
 
         let mask = receiver_mask(&keys, self.choice, self.n, self.message_len);
@@ -164,7 +164,7 @@ impl TreeOtSender {
             let (base_sender_msg, sender_output) =
                 KyberEndemicOtSender::respond(base_receiver_msg, rng)?;
             base_messages.push(base_sender_msg);
-            sender_keys.push((sender_output.k_0, sender_output.k_1));
+            sender_keys.push((sender_output.o_0, sender_output.o_1));
         }
 
         let ciphertexts = messages
