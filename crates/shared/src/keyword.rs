@@ -265,7 +265,11 @@ fn pack_posting_block(postings: &[RecordId], record_size: usize, eof: u16) -> Ve
     block
 }
 
-pub fn build_posting_blocks(mapping: &HashMap<String, Vec<RecordId>>,perfect_hash: &PerfectHash,eof: u16) -> (Vec<Vec<Zp>>, usize) {
+pub fn build_posting_blocks(
+    mapping: &HashMap<String, Vec<RecordId>>,
+    perfect_hash: &PerfectHash,
+    eof: u16,
+) -> (Vec<Vec<Zp>>, usize) {
     let max_posting_len = mapping.values().map(|posts| posts.len()).max().unwrap_or(0);
     let record_size = max_posting_len.saturating_add(1);
     let mut blocks = vec![pack_posting_block(&[], record_size, eof); perfect_hash.table_size];
@@ -278,7 +282,11 @@ pub fn build_posting_blocks(mapping: &HashMap<String, Vec<RecordId>>,perfect_has
     (blocks, record_size)
 }
 
-fn build_masked_posting_blocks(mapping: &HashMap<String, Vec<RecordId>>,oprf_key: &OprfKey,eof: u16) -> (HashMap<String, Vec<Zp>>, usize) {
+fn build_masked_posting_blocks(
+    mapping: &HashMap<String, Vec<RecordId>>,
+    oprf_key: &OprfKey,
+    eof: u16,
+) -> (HashMap<String, Vec<Zp>>, usize) {
     let max_posting_len = mapping.values().map(|posts| posts.len()).max().unwrap_or(0);
     let record_size = max_posting_len.saturating_add(1);
     let block_cell_count = record_size * 2;
@@ -286,7 +294,12 @@ fn build_masked_posting_blocks(mapping: &HashMap<String, Vec<RecordId>>,oprf_key
 
     for (keyword, postings) in mapping {
         let input = encode_keyword(keyword, DEFAULT_M);
-        let token = eval_keyword(&oprf_key.row1[input.x1], &oprf_key.row2[input.x2], input, block_cell_count);
+        let token = eval_keyword(
+            &oprf_key.row1[input.x1],
+            &oprf_key.row2[input.x2],
+            input,
+            block_cell_count,
+        );
         let block = pack_posting_block(postings, record_size, eof);
         let masked_block: Vec<Zp> = block
             .into_iter()
@@ -300,7 +313,11 @@ fn build_masked_posting_blocks(mapping: &HashMap<String, Vec<RecordId>>,oprf_key
     (masked_mapping, record_size)
 }
 
-fn pack_prebuilt_blocks(mapping: &HashMap<String, Vec<Zp>>,perfect_hash: &PerfectHash,block_cell_count: usize) -> Vec<Vec<Zp>> {
+fn pack_prebuilt_blocks(
+    mapping: &HashMap<String, Vec<Zp>>,
+    perfect_hash: &PerfectHash,
+    block_cell_count: usize,
+) -> Vec<Vec<Zp>> {
     let mut blocks = vec![vec![Wrapping(0); block_cell_count]; perfect_hash.table_size];
 
     for (keyword, block) in mapping {

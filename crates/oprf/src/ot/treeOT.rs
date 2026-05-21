@@ -1,7 +1,8 @@
-use super::{
+use super::endemic_kyber::{
     KyberEndemicOtError, KyberEndemicOtReceiver, KyberEndemicOtReceiverMessage,
-    KyberEndemicOtSender, KyberEndemicOtSenderMessage, OtKey,
+    KyberEndemicOtSender, KyberEndemicOtSenderMessage,
 };
+use super::OtKey;
 use rand::CryptoRng;
 use rand::RngCore;
 

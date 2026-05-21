@@ -27,7 +27,11 @@ pub fn slot_to_matrix_pos(slot: usize, square_n: usize) -> (usize, usize) {
     (slot / square_n, slot % square_n)
 }
 
-fn get_block_positions(start_cell: usize,block_cell_count: usize,square_n: usize) -> Vec<(usize, usize)> {
+fn get_block_positions(
+    start_cell: usize,
+    block_cell_count: usize,
+    square_n: usize,
+) -> Vec<(usize, usize)> {
     (0..block_cell_count)
         .map(|offset| {
             let cell_index = start_cell + offset;
@@ -36,7 +40,10 @@ fn get_block_positions(start_cell: usize,block_cell_count: usize,square_n: usize
         .collect()
 }
 
-pub fn keyword_query(keyword: &str,closure: &KeywordClosure) -> Option<(KeywordQueryState, Vec<Array1<Zq>>)> {
+pub fn keyword_query(
+    keyword: &str,
+    closure: &KeywordClosure,
+) -> Option<(KeywordQueryState, Vec<Array1<Zq>>)> {
     let slot = keyword_to_slot(keyword, closure)?;
     let block_start_cell = slot * closure.block_cell_count();
     let square_n = closure.square_n;
@@ -87,12 +94,22 @@ pub fn secure_keyword_query(
     Some((state, whole_query))
 }
 
-pub fn recover_keyword_block(state: &KeywordQueryState,block_cell_count: usize,hint_c: &Array2<Zq>,answers: &[Array1<Zq>]) -> RecordFetchRequest {
+pub fn recover_keyword_block(
+    state: &KeywordQueryState,
+    block_cell_count: usize,
+    hint_c: &Array2<Zq>,
+    answers: &[Array1<Zq>],
+) -> RecordFetchRequest {
     let bytes = recover_keyword_block_bytes(state, block_cell_count, hint_c, answers);
     decode_record_fetch_request(&bytes, state.eof)
 }
 
-pub fn recover_keyword_block_bytes(state: &KeywordQueryState,block_cell_count: usize,hint_c: &Array2<Zq>,answers: &[Array1<Zq>],) -> Vec<u8> {
+pub fn recover_keyword_block_bytes(
+    state: &KeywordQueryState,
+    block_cell_count: usize,
+    hint_c: &Array2<Zq>,
+    answers: &[Array1<Zq>],
+) -> Vec<u8> {
     let positions = get_block_positions(state.block_start_cell, block_cell_count, state.square_n);
     let mut recovered = Array1::zeros(block_cell_count);
 

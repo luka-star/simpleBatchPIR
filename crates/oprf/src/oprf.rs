@@ -1,4 +1,8 @@
+use crate::ot::{
+    TreeOtError, TreeOtReceiver, TreeOtReceiverMessage, TreeOtSender, TreeOtSenderMessage,
+};
 use crate::{eval, GKey, OprfKey, PrfInput};
+use rand::{CryptoRng, RngCore};
 
 pub const DEFAULT_M: usize = 256;
 pub const DEFAULT_X_HAT_LEN: usize = 16;
@@ -7,6 +11,131 @@ pub const DEFAULT_X_HAT_LEN: usize = 16;
 pub struct MaskedKeyword {
     pub x_hat: String,
     pub p_hat: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub enum OprfError {
+    TreeOt(TreeOtError),
+    MismatchedKeyRows,
+    QueryShapeMismatch,
+    WrongRecoveredKeyLength,
+    AlreadyAnswered,
+}
+
+impl From<TreeOtError> for OprfError {
+    fn from(error: TreeOtError) -> Self {
+        Self::TreeOt(error)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct OprfClientState {
+    input: PrfInput,
+    payload_len: usize,
+    left_receiver: TreeOtReceiver,
+    right_receiver: TreeOtReceiver,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OprfQuery {
+    pub left: TreeOtReceiverMessage,
+    pub right: TreeOtReceiverMessage,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OprfResponse {
+    pub left: TreeOtSenderMessage,
+    pub right: TreeOtSenderMessage,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OprfClient;
+
+#[derive(Debug, Clone)]
+pub struct OprfServer {
+    key: OprfKey
+}
+
+impl OprfClient {
+    pub fn init_oprf(
+        keyword: &str,
+        payload_len: usize,
+        rng: &mut (impl RngCore + CryptoRng),
+    ) -> Result<(OprfClientState, OprfQuery), OprfError> {
+        let input = encode_keyword(keyword, DEFAULT_M);
+        let (left_receiver, left) =
+            TreeOtReceiver::choose_leaf(input.x1, DEFAULT_M, std::mem::size_of::<GKey>(), rng)?;
+        let (right_receiver, right) =
+            TreeOtReceiver::choose_leaf(input.x2, DEFAULT_M, std::mem::size_of::<GKey>(), rng)?;
+
+        Ok((
+            OprfClientState {
+                input,
+                payload_len,
+                left_receiver,
+                right_receiver,
+            },
+            OprfQuery { left, right },
+        ))
+    }
+
+    pub fn recover(
+        state: OprfClientState,
+        response: &OprfResponse,
+    ) -> Result<MaskedKeyword, OprfError> {
+        let left_key = recover_key(state.left_receiver, &response.left)?;
+        let right_key = recover_key(state.right_receiver, &response.right)?;
+
+        Ok(eval_keyword(
+            &left_key,
+            &right_key,
+            state.input,
+            state.payload_len,
+        ))
+    }
+}
+
+impl OprfServer {
+    pub fn new(key: OprfKey) -> Self {
+        Self {
+            key
+        }
+    }
+
+    pub fn answer(
+        &mut self,
+        query: &OprfQuery,
+        rng: &mut (impl RngCore + CryptoRng),
+    ) -> Result<OprfResponse, OprfError> {
+        if self.key.row1.len() != self.key.row2.len() {
+            return Err(OprfError::MismatchedKeyRows);
+        }
+        if query.left.n != self.key.row1.len() || query.right.n != self.key.row2.len() {
+            return Err(OprfError::QueryShapeMismatch);
+        }
+
+        let left_messages = row_messages(&self.key.row1);
+        let right_messages = row_messages(&self.key.row2);
+        let left = TreeOtSender::respond(&left_messages, &query.left, rng)?;
+        let right = TreeOtSender::respond(&right_messages, &query.right, rng)?;
+
+        Ok(OprfResponse { left, right })
+    }
+}
+
+fn row_messages(row: &[GKey]) -> Vec<Vec<u8>> {
+    row.iter().map(|key| key.to_vec()).collect()
+}
+
+fn recover_key(
+    receiver: TreeOtReceiver,
+    sender_msg: &TreeOtSenderMessage,
+) -> Result<GKey, OprfError> {
+    let output = receiver.recover_leaf(sender_msg)?;
+    output
+        .message
+        .try_into()
+        .map_err(|_| OprfError::WrongRecoveredKeyLength)
 }
 
 #[derive(Debug, Clone)]
@@ -64,39 +193,21 @@ fn bytes_to_index(bytes: &[u8], m: usize) -> usize {
 mod tests {
     use super::*;
     use crate::keygen;
-    use crate::ot::{TreeOtReceiver, TreeOtSender};
     use rand::thread_rng;
 
-    fn select_key_with_tree_ot(
-        row: &[GKey],
-        index: usize,
-        rng: &mut (impl rand::RngCore + rand::CryptoRng),
-    ) -> GKey {
-        let messages: Vec<Vec<u8>> = row.iter().map(|key| key.to_vec()).collect();
-        let (receiver, receiver_msg) =
-            TreeOtReceiver::choose_leaf(index, messages.len(), std::mem::size_of::<GKey>(), rng)
-                .expect("tree OT receiver start should succeed");
-        let sender_msg = TreeOtSender::respond(&messages, &receiver_msg, rng)
-            .expect("tree OT sender response should succeed");
-        let output = receiver
-            .recover_leaf(&sender_msg)
-            .expect("tree OT receiver recover_leaf should succeed");
-        output
-            .message
-            .try_into()
-            .expect("tree OT should recover one 32-byte OPRF row key")
-    }
-
-    fn eval_keyword_with_tree_ot(
+    fn eval_keyword_with_protocol(
         key: &OprfKey,
         keyword: &str,
         payload_len: usize,
         rng: &mut (impl rand::RngCore + rand::CryptoRng),
     ) -> MaskedKeyword {
-        let input = encode_keyword(keyword, DEFAULT_M);
-        let left_key = select_key_with_tree_ot(&key.row1, input.x1, rng);
-        let right_key = select_key_with_tree_ot(&key.row2, input.x2, rng);
-        eval_keyword(&left_key, &right_key, input, payload_len)
+        let (state, query) = OprfClient::init_oprf(keyword, payload_len, rng)
+            .expect("OPRF client should initialize query");
+        let mut server = OprfServer::new(key.clone());
+        let response = server
+            .answer(&query, rng)
+            .expect("OPRF server should answer query");
+        OprfClient::recover(state, &response).expect("OPRF client should finalize response")
     }
 
     #[test]
@@ -108,7 +219,7 @@ mod tests {
         let payload_len = 64;
 
         let mock_token = mock.eval_keyword(keyword, payload_len);
-        let tree_ot_token = eval_keyword_with_tree_ot(&key, keyword, payload_len, &mut rng);
+        let tree_ot_token = eval_keyword_with_protocol(&key, keyword, payload_len, &mut rng);
 
         assert_eq!(tree_ot_token, mock_token);
     }
@@ -134,9 +245,35 @@ mod tests {
 
         for keyword in keywords {
             let mock_token = mock.eval_keyword(keyword, payload_len);
-            let tree_ot_token = eval_keyword_with_tree_ot(&key, keyword, payload_len, &mut rng);
+            let tree_ot_token = eval_keyword_with_protocol(&key, keyword, payload_len, &mut rng);
 
             assert_eq!(tree_ot_token, mock_token, "keyword: {keyword}");
         }
+    }
+
+    #[test]
+    fn oprf_server_rejects_wrong_query_shape() {
+        let mut rng = thread_rng();
+        let key = keygen(DEFAULT_M, &mut rng);
+        let (_state, mut query) = OprfClient::init_oprf("metallica", 64, &mut rng).unwrap();
+        query.left.n += 1;
+        let mut server = OprfServer::new(key);
+
+        let err = server.answer(&query, &mut rng).unwrap_err();
+
+        assert!(matches!(err, OprfError::QueryShapeMismatch));
+    }
+
+    #[test]
+    fn oprf_server_is_one_time() {
+        let mut rng = thread_rng();
+        let key = keygen(DEFAULT_M, &mut rng);
+        let mut server = OprfServer::new(key);
+        let (_state, query) = OprfClient::init_oprf("metallica", 64, &mut rng).unwrap();
+
+        server.answer(&query, &mut rng).unwrap();
+        let err = server.answer(&query, &mut rng).unwrap_err();
+
+        assert!(matches!(err, OprfError::AlreadyAnswered));
     }
 }

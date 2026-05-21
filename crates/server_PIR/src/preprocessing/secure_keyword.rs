@@ -1,4 +1,4 @@
-use oprf::{keygen, MockOprf, DEFAULT_M};
+use oprf::{keygen, OprfQuery, OprfResponse, OprfServer, DEFAULT_M};
 use rand_08::thread_rng;
 use shared::keyword::{build_secure_keyword_index, SecureKeywordClosure, SecureKeywordIndex};
 use shared::models::Band;
@@ -6,7 +6,7 @@ use shared::models::Band;
 use super::plain::{setup, SetupResult};
 
 pub struct SecureKeywordSetup {
-    pub oprf: MockOprf,
+    pub oprf: OprfServer,
     pub keyword_index: SecureKeywordIndex,
     pub keyword_closure: SecureKeywordClosure,
     pub setup_result: SetupResult,
@@ -18,7 +18,7 @@ pub fn build_secure_keyword_setup(db: &[Band]) -> SecureKeywordSetup {
     let keyword_index = build_secure_keyword_index(db, &oprf_key);
     let keyword_closure = keyword_index.closure();
     let setup_result = setup(&keyword_index.matrix);
-    let oprf = MockOprf::new(oprf_key);
+    let oprf = OprfServer::new(oprf_key);
 
     SecureKeywordSetup {
         oprf,
@@ -26,4 +26,12 @@ pub fn build_secure_keyword_setup(db: &[Band]) -> SecureKeywordSetup {
         keyword_closure,
         setup_result,
     }
+}
+
+pub fn answer_secure_keyword_oprf(
+    setup: &mut SecureKeywordSetup,
+    query: &OprfQuery,
+) -> Result<OprfResponse, oprf::OprfError> {
+    let mut rng = thread_rng();
+    setup.oprf.answer(query, &mut rng)
 }

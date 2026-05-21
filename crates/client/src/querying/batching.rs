@@ -31,7 +31,12 @@ pub fn oracle_index(
     map.get(&(bucket, record)).copied()
 }
 
-pub fn batch_querying(indices: &[usize],position_map: &HashMap<(usize, usize), usize>,bucket_element_counts: &[usize], config: &pbc::PBCConfig) -> (
+pub fn batch_querying(
+    indices: &[usize],
+    position_map: &HashMap<(usize, usize), usize>,
+    bucket_element_counts: &[usize],
+    config: &pbc::PBCConfig,
+) -> (
     Vec<QueryState>,
     Vec<Vec<Array1<Zq>>>,
     Result<HashMap<usize, usize>, String>,

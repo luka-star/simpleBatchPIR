@@ -10,5 +10,6 @@ ndarray = "0.16"
 shared = { path = "../shared" }
 oprf = { path = "../oprf" }
 rand = "0.9"
+rand_08 = { package = "rand", version = "0.8" }
 rand_chacha = "0.9"
 rand_distr = "0.5"

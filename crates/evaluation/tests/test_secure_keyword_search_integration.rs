@@ -1,11 +1,13 @@
 #[cfg(test)]
 mod integration_tests {
     use client::querying::{
-        batch_querying, batch_recovering, keyword_query, recover_keyword_block, sec_keyword_query,
+        batch_querying, batch_recovering, keyword_query, recover_keyword_block, sec_keyword_query_start,
         sec_keyword_recover,
     };
     use server_pir::{
-        offline_preprocess::{build_secure_keyword_setup, setup, setup_batching},
+        offline_preprocess::{
+            answer_secure_keyword_oprf, build_secure_keyword_setup, setup, setup_batching,
+        },
         online_process::{answer_query, batch_answering},
     };
     use shared::{keyword::build_keyword_index, models::Band, pbc::PBCConfig};
@@ -13,7 +15,8 @@ mod integration_tests {
     use tokio_postgres::NoTls;
 
     #[tokio::test]
-    async fn test_secure_keyword_search_pipeline_on_real_1024_row_dataset() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_secure_keyword_search_pipeline_on_real_1024_row_dataset(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
             "host=localhost user=user password=password dbname=pir_db".to_string()
         });
@@ -60,12 +63,19 @@ mod integration_tests {
             &plain_answers,
         );
 
-        let secure_setup = build_secure_keyword_setup(&bands);
-        let (secure_state, secure_queries) = sec_keyword_query(
-            &keyword,
+        let mut secure_setup = build_secure_keyword_setup(&bands);
+        let (secure_oprf_state, secure_oprf_query) =
+            sec_keyword_query_start(&keyword, &secure_setup.keyword_closure)
+                .expect("keyword should normalize for secure keyword query");
+        let secure_oprf_response =
+            answer_secure_keyword_oprf(&mut secure_setup, &secure_oprf_query)
+                .expect("secure keyword OPRF should answer");
+        let (secure_state, secure_queries) = client::querying::sec_keyword_finish_query(
+            secure_oprf_state,
             &secure_setup.keyword_closure,
-            &secure_setup.oprf,
+            &secure_oprf_response,
         )
+        .expect("secure keyword OPRF should recover")
         .expect("keyword should exist in the secure keyword index");
         let secure_answers = answer_query(&secure_setup.keyword_index.matrix, &secure_queries);
         let secure_record_fetch_request = sec_keyword_recover(

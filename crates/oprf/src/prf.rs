@@ -5,7 +5,8 @@ pub mod ot;
 
 pub use keygen::{keygen, GKey, OprfKey};
 pub use oprf::{
-    encode_keyword, eval_keyword, MaskedKeyword, MockOprf, DEFAULT_M, DEFAULT_X_HAT_LEN,
+    encode_keyword, eval_keyword, MaskedKeyword, MockOprf, OprfClient, OprfClientState, OprfError,
+    OprfQuery, OprfResponse, OprfServer, DEFAULT_M, DEFAULT_X_HAT_LEN,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -8,7 +8,10 @@ use std::num::Wrapping;
 
 use super::plain::{setup_with_matrix, SetupResult};
 
-pub fn batching_encode(db: &[Band],config: &PBCConfig) -> (Vec<Vec<Band>>, HashMap<(usize, usize), usize>) {
+pub fn batching_encode(
+    db: &[Band],
+    config: &PBCConfig,
+) -> (Vec<Vec<Band>>, HashMap<(usize, usize), usize>) {
     let b = config.buckets;
     let w = config.w();
 
@@ -27,7 +30,15 @@ pub fn batching_encode(db: &[Band],config: &PBCConfig) -> (Vec<Vec<Band>>, HashM
     (buckets, position_map)
 }
 
-pub fn setup_batching(db: &[Band],config: &PBCConfig) -> (Vec<SetupResult>,HashMap<(usize, usize), usize>,Vec<Array2<Zp>>,Vec<Array2<Zq>>,) {
+pub fn setup_batching(
+    db: &[Band],
+    config: &PBCConfig,
+) -> (
+    Vec<SetupResult>,
+    HashMap<(usize, usize), usize>,
+    Vec<Array2<Zp>>,
+    Vec<Array2<Zq>>,
+) {
     let (buckets, position_map) = batching_encode(db, config);
     let mut setup_res: Vec<SetupResult> = Vec::with_capacity(buckets.len());
     let mut encode_buckets: Vec<Array2<Zp>> = Vec::with_capacity(buckets.len());

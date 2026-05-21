@@ -36,7 +36,10 @@ impl PBCConfig {
     }
 }
 
-pub fn gen_schedule<T: Hash + Copy + Eq>(config: &PBCConfig,indices: &[T]) -> Result<HashMap<T, usize>, String> {
+pub fn gen_schedule<T: Hash + Copy + Eq>(
+    config: &PBCConfig,
+    indices: &[T],
+) -> Result<HashMap<T, usize>, String> {
     let mut used_buckets = HashSet::new();
     let mut schedule = HashMap::new();
 

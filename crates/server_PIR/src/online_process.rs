@@ -6,7 +6,10 @@ pub fn answer_query(db: &Array2<Zp>, queries: &[Array1<Zq>]) -> Vec<Array1<Zq>> 
     queries.iter().map(|q| db_lifted.dot(q)).collect()
 }
 
-pub fn batch_answering(queries: &[Vec<Array1<Zq>>],buckets: &[Array2<Zq>]) -> Vec<Vec<Array1<Zq>>> {
+pub fn batch_answering(
+    queries: &[Vec<Array1<Zq>>],
+    buckets: &[Array2<Zq>],
+) -> Vec<Vec<Array1<Zq>>> {
     buckets
         .iter()
         .zip(queries.iter())
