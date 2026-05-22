@@ -1,16 +1,10 @@
 #[cfg(test)]
 mod integration_tests {
-    use client::querying::{
-        batch_querying, batch_recovering, keyword_query, recover_keyword_block, sec_keyword_query_start,
-        sec_keyword_recover,
+    use keyword_search::{
+        PlainKeywordClient, PlainKeywordServer, SecureKeywordClient, SecureKeywordServer,
     };
-    use server_pir::{
-        offline_preprocess::{
-            answer_secure_keyword_oprf, build_secure_keyword_setup, setup, setup_batching,
-        },
-        online_process::{answer_query, batch_answering},
-    };
-    use shared::{keyword::build_keyword_index, models::Band, pbc::PBCConfig};
+    use shared::{models::Band, pbc::PBCConfig};
+    use simplepir::{BatchSimplePIRClient, BatchSimplePIRServer};
     use std::env;
     use tokio_postgres::NoTls;
 
@@ -49,39 +43,41 @@ mod integration_tests {
             })
             .collect();
 
-        let plain_keyword_index = build_keyword_index(&bands);
-        let plain_keyword_closure = plain_keyword_index.closure();
-        let plain_keyword_setup = setup(&plain_keyword_index.matrix);
+        let keyword_mapping = shared::models::construct_keyword_mapping(&bands);
 
-        let (plain_state, plain_queries) = keyword_query(&keyword, &plain_keyword_closure)
+        let plain_server = PlainKeywordServer::setup(&keyword_mapping);
+        let plain_closure = plain_server.closure();
+
+        let (plain_state, plain_queries) = PlainKeywordClient::query(&keyword, &plain_closure)
             .expect("keyword should exist in the plaintext keyword index");
-        let plain_answers = answer_query(&plain_keyword_index.matrix, &plain_queries);
-        let plain_record_fetch_request = recover_keyword_block(
+        let plain_answers = plain_server.answer(&plain_queries);
+        let plain_record_fetch_request = PlainKeywordClient::recover(
             &plain_state,
-            plain_keyword_closure.block_cell_count(),
-            &plain_keyword_setup.hint_c,
+            &plain_closure,
+            plain_server.pir.hint(),
             &plain_answers,
         );
 
-        let mut secure_setup = build_secure_keyword_setup(&bands);
+        let mut secure_server = SecureKeywordServer::setup(&keyword_mapping);
+        let secure_closure = secure_server.closure();
         let (secure_oprf_state, secure_oprf_query) =
-            sec_keyword_query_start(&keyword, &secure_setup.keyword_closure)
+            SecureKeywordClient::start_oprf(&keyword, &secure_closure)
                 .expect("keyword should normalize for secure keyword query");
-        let secure_oprf_response =
-            answer_secure_keyword_oprf(&mut secure_setup, &secure_oprf_query)
-                .expect("secure keyword OPRF should answer");
-        let (secure_state, secure_queries) = client::querying::sec_keyword_finish_query(
+        let secure_oprf_response = secure_server
+            .answer_oprf(&secure_oprf_query)
+            .expect("secure keyword OPRF should answer");
+        let (secure_state, secure_queries) = SecureKeywordClient::finish_query(
             secure_oprf_state,
-            &secure_setup.keyword_closure,
+            &secure_closure,
             &secure_oprf_response,
         )
         .expect("secure keyword OPRF should recover")
         .expect("keyword should exist in the secure keyword index");
-        let secure_answers = answer_query(&secure_setup.keyword_index.matrix, &secure_queries);
-        let secure_record_fetch_request = sec_keyword_recover(
+        let secure_answers = secure_server.answer(&secure_queries);
+        let secure_record_fetch_request = SecureKeywordClient::recover(
             &secure_state,
-            secure_setup.keyword_closure.block_cell_count(),
-            &secure_setup.setup_result.hint_c,
+            &secure_closure,
+            secure_server.setup.pir.hint(),
             &secure_answers,
         );
 
@@ -107,18 +103,23 @@ mod integration_tests {
         );
 
         let config = PBCConfig::new(1500, 3);
-        let (setup_res, position_map, buckets, lifted_buckets) = setup_batching(&bands, &config);
-        let bucket_element_counts: Vec<usize> = buckets.iter().map(|bucket| bucket.len()).collect();
-        let (states, query_results, batch_schedule) = batch_querying(
+        let batch_server = BatchSimplePIRServer::setup(
+            &Band::bands_to_matrix(&bands),
+            Band::SIZEOFRECORD,
+            &config,
+        );
+        let bucket_element_counts = batch_server.bucket_element_counts();
+        let (states, query_results, batch_schedule) = BatchSimplePIRClient::query(
             secure_record_fetch_request.record_ids(),
-            &position_map,
+            &batch_server.position_map,
             &bucket_element_counts,
+            Band::SIZEOFRECORD,
             &config,
         );
         let batch_schedule = batch_schedule.expect("batch scheduling should succeed");
-        let answers = batch_answering(&query_results, &lifted_buckets);
-        let hint_cs: Vec<_> = setup_res.iter().map(|r| r.hint_c.clone()).collect();
-        let recovered_rows = batch_recovering(
+        let answers = batch_server.answer(&query_results);
+        let hint_cs = batch_server.hints();
+        let recovered_rows = BatchSimplePIRClient::recover(
             &states,
             &answers,
             secure_record_fetch_request.record_ids(),

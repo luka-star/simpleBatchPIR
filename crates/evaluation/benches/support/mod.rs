@@ -69,7 +69,7 @@ pub fn assert_requested_band_count(requested: usize, actual: usize) {
 
 pub fn random_idx(upper: usize) -> usize {
     assert!(upper > 0, "upper bound must be positive");
-    rand::rng().random_range(0..upper)
+    rand::thread_rng().gen_range(0..upper)
 }
 
 pub fn random_index_list(count: usize, upper: usize) -> Vec<usize> {
@@ -82,5 +82,5 @@ pub fn random_index_list(count: usize, upper: usize) -> Vec<usize> {
         return Vec::new();
     }
 
-    sample(&mut rand::rng(), upper, count).into_vec()
+    sample(&mut rand::thread_rng(), upper, count).into_vec()
 }

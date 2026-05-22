@@ -1,6 +1,8 @@
 use crate::rings::Zp;
+use crate::{keyword::RecordId, tokenize_text};
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::num::Wrapping;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -96,4 +98,55 @@ impl Band {
             .map(Band::unpack_band_from_zp)
             .collect()
     }
+}
+
+fn push_tokens_from_text(text: &str, tokens: &mut Vec<String>, seen: &mut HashSet<String>) {
+    for token in tokenize_text(text) {
+        if seen.insert(token.clone()) {
+            tokens.push(token);
+        }
+    }
+}
+
+pub fn tokenize_band(band: &Band) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut seen = HashSet::new();
+
+    if let Some(name) = band.name.as_deref() {
+        push_tokens_from_text(name, &mut tokens, &mut seen);
+    }
+    if let Some(origin) = band.origin.as_deref() {
+        push_tokens_from_text(origin, &mut tokens, &mut seen);
+    }
+    if let Some(style) = band.style.as_deref() {
+        for style_part in style.split(',') {
+            push_tokens_from_text(style_part, &mut tokens, &mut seen);
+        }
+    }
+    if band.formed > 0 {
+        let token = band.formed.to_string();
+        if seen.insert(token.clone()) {
+            tokens.push(token);
+        }
+    }
+    if band.split > 0 {
+        let token = band.split.to_string();
+        if seen.insert(token.clone()) {
+            tokens.push(token);
+        }
+    }
+
+    tokens
+}
+
+pub fn construct_keyword_mapping(db: &[Band]) -> HashMap<String, Vec<RecordId>> {
+    let mut mapping: HashMap<String, Vec<RecordId>> = HashMap::new();
+
+    for band in db {
+        for token in tokenize_band(band) {
+            mapping.entry(token).or_default().push(band.id as usize);
+        }
+    }
+
+    mapping
 }

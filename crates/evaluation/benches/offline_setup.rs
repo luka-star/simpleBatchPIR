@@ -1,8 +1,9 @@
 mod support;
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use server_pir::offline_preprocess;
-use shared::{models::Band, pbc};
+use shared::models::Band;
+use shared::pbc;
+use simplepir::{BatchSimplePIRServer, SimplePIRServer};
 use std::path::Path;
 use support::{assert_requested_band_count, make_bands};
 use tokio::runtime::Runtime;
@@ -34,8 +35,7 @@ fn offline_setup(c: &mut Criterion) {
                         .block_on(make_bands(nr_bands))
                         .expect("Failed to fetch bands");
                     assert_requested_band_count(nr_bands, bands.len());
-                    let db_matrix = Band::bands_to_matrix(&bands);
-                    offline_preprocess::setup(black_box(&db_matrix))
+                    SimplePIRServer::setup(black_box(Band::bands_to_matrix(&bands)))
                 })
             },
         );
@@ -53,7 +53,12 @@ fn offline_setup(c: &mut Criterion) {
                         .expect("Failed to fetch bands");
                     assert_requested_band_count(nr_bands, bands.len());
                     let config = pbc::PBCConfig::new(1500, 3);
-                    offline_preprocess::setup_batching(black_box(&bands), black_box(&config))
+                    let db = Band::bands_to_matrix(&bands);
+                    BatchSimplePIRServer::setup(
+                        black_box(&db),
+                        black_box(Band::SIZEOFRECORD),
+                        black_box(&config),
+                    )
                 })
             },
         );

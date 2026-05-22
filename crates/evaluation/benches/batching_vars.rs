@@ -1,9 +1,9 @@
 mod support;
 
-use client::querying;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use server_pir::{offline_preprocess, online_process};
-use shared::{pbc, rings::Zq};
+use shared::models::Band;
+use shared::pbc;
+use simplepir::{BatchSimplePIRClient, BatchSimplePIRServer};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -205,8 +205,13 @@ fn setup_vars(c: &mut Criterion) {
                 BenchmarkId::new(format!("w_{w}"), bucket_count),
                 &config,
                 |b, config| {
+                    let db = Band::bands_to_matrix(&bands);
                     b.iter(|| {
-                        offline_preprocess::setup_batching(black_box(&bands), black_box(config))
+                        BatchSimplePIRServer::setup(
+                            black_box(&db),
+                            black_box(Band::SIZEOFRECORD),
+                            black_box(config),
+                        )
                     })
                 },
             );
@@ -226,14 +231,13 @@ fn multiple_query(c: &mut Criterion) {
     for w in HASH_FUNCTION_COUNTS {
         for bucket_count in BUCKET_COUNTS {
             let config = pbc::PBCConfig::new(bucket_count, w);
-            let (setup_res, position_map, padded_buckets, lifted_buckets) =
-                offline_preprocess::setup_batching(&bands, &config);
-            let bucket_element_counts: Vec<usize> =
-                padded_buckets.iter().map(|bucket| bucket.len()).collect();
-            let hint_cs: Vec<_> = setup_res
-                .iter()
-                .map(|result| result.hint_c.clone())
-                .collect::<Vec<ndarray::Array2<Zq>>>();
+            let batch_server = BatchSimplePIRServer::setup(
+                &Band::bands_to_matrix(&bands),
+                Band::SIZEOFRECORD,
+                &config,
+            );
+            let bucket_element_counts = batch_server.bucket_element_counts();
+            let hint_cs = batch_server.hints();
             let mut group = c.benchmark_group(format!(
                 "multiple_query_batchpir/db_{NUMBER_OF_BANDS}/w_{w}/b_{bucket_count}"
             ));
@@ -253,19 +257,17 @@ fn multiple_query(c: &mut Criterion) {
                     &nr_indices,
                     |b, &_nr_indices| {
                         b.iter(|| {
-                            let (states, queries, schedule) = querying::batch_querying(
+                            let (states, queries, schedule) = BatchSimplePIRClient::query(
                                 black_box(&index_list),
-                                black_box(&position_map),
+                                black_box(&batch_server.position_map),
                                 black_box(&bucket_element_counts),
+                                black_box(Band::SIZEOFRECORD),
                                 black_box(&config),
                             );
                             let schedule =
                                 schedule.expect("batch querying should succeed in benchmark");
-                            let answers = online_process::batch_answering(
-                                black_box(&queries),
-                                black_box(&lifted_buckets),
-                            );
-                            querying::batch_recovering(
+                            let answers = batch_server.answer(black_box(&queries));
+                            BatchSimplePIRClient::recover(
                                 black_box(&states),
                                 black_box(&answers),
                                 black_box(&index_list),

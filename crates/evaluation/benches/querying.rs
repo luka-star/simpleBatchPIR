@@ -1,9 +1,8 @@
 mod support;
 
-use client::querying;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use server_pir::{offline_preprocess, online_process};
 use shared::models::Band;
+use simplepir::{SimplePIRClient, SimplePIRServer};
 use std::env;
 use std::path::Path;
 use support::{assert_requested_band_count, make_bands, random_idx};
@@ -30,9 +29,7 @@ fn query_dbsize(c: &mut Criterion) {
             .block_on(make_bands(nr_bands))
             .expect("Failed to fetch bands");
         assert_requested_band_count(nr_bands, bands.len());
-        let db_matrix = Band::bands_to_matrix(&bands);
-        let n_elements = bands.len() * Band::SIZEOFRECORD;
-        let setup_res = offline_preprocess::setup(&db_matrix);
+        let pir_server = SimplePIRServer::setup(Band::bands_to_matrix(&bands));
         let actual_band_count = bands.len();
 
         group.bench_with_input(
@@ -40,15 +37,17 @@ fn query_dbsize(c: &mut Criterion) {
             &nr_bands,
             |b, &_nr_bands| {
                 b.iter(|| {
-                    let (secrets, queries) = querying::query(
-                        black_box(random_idx(actual_band_count)),
-                        black_box(n_elements),
+                    let record_index = black_box(random_idx(actual_band_count));
+                    let block_start_cell = record_index * Band::SIZEOFRECORD;
+                    let (secrets, queries) = SimplePIRClient::query_record(
+                        black_box(block_start_cell),
+                        black_box(Band::SIZEOFRECORD),
+                        black_box(pir_server.square_n()),
                     );
-                    let answers =
-                        online_process::answer_query(black_box(&db_matrix), black_box(&queries));
-                    querying::recover(
+                    let answers = pir_server.answer(black_box(&queries));
+                    SimplePIRClient::recover_record(
                         black_box(&secrets),
-                        black_box(&setup_res.hint_c),
+                        black_box(pir_server.hint()),
                         black_box(&answers),
                     );
                 })

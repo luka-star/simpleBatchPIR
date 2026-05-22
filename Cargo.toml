@@ -2,9 +2,9 @@
 resolver = "2"
 
 members = [
-    "crates/client",
+    "crates/keyword_search",
     "crates/oprf",
-    "crates/server_PIR",
     "crates/shared",
+    "crates/simplepir",
     "crates/evaluation",
 ]

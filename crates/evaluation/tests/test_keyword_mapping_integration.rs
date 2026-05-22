@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod integration_tests {
-    use shared::keyword::construct_keyword_mapping;
+    use shared::models::construct_keyword_mapping;
     use shared::models::Band;
     use std::{collections::BTreeMap, env};
     use tokio_postgres::NoTls;

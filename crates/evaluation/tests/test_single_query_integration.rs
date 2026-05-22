@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod integration_tests {
-    use client::querying::{query, recover};
-    use server_pir::{offline_preprocess::setup, online_process::answer_query};
     use shared::models::Band;
+    use simplepir::{SimplePIRClient, SimplePIRServer};
     use std::env;
     use tokio_postgres::NoTls;
 
@@ -45,18 +44,22 @@ mod integration_tests {
             })
             .collect();
 
-        let db_matrix = Band::bands_to_matrix(&bands);
-        let setup_res = setup(&db_matrix);
+        let pir_server = SimplePIRServer::setup(Band::bands_to_matrix(&bands));
 
         let target_band_idx = 979;
 
         let original_band = &bands[target_band_idx];
 
-        let matrix_n = db_matrix.len();
-        let (secrets, queries) = query(target_band_idx, matrix_n);
-        let answers = answer_query(&db_matrix, &queries);
+        let block_start_cell = target_band_idx * Band::SIZEOFRECORD;
+        let (secrets, queries) = SimplePIRClient::query_record(
+            block_start_cell,
+            Band::SIZEOFRECORD,
+            pir_server.square_n(),
+        );
+        let answers = pir_server.answer(&queries);
 
-        let recovered_record = recover(&secrets, &setup_res.hint_c, &answers);
+        let recovered_record =
+            SimplePIRClient::recover_record(&secrets, pir_server.hint(), &answers);
         let desired_band = Band::pack_band_to_zp(original_band);
 
         println!("The original band: {:?}", desired_band);
@@ -65,7 +68,7 @@ mod integration_tests {
 
         assert_eq!(recovered_record.len(), desired_band.len());
 
-        let recovered_band = Band::unpack_band_from_zp(&recovered_record.to_vec());
+        let recovered_band = Band::unpack_band_from_zp(&recovered_record);
         println!("The final recovered band: {:?}", recovered_band);
         assert_eq!(recovered_band.id, original_band.id);
 

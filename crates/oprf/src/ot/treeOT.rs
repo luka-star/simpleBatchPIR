@@ -6,7 +6,7 @@ use super::OtKey;
 use rand::CryptoRng;
 use rand::RngCore;
 
-const PAD_DOMAIN: &[u8] = b"naor-pinkas-tree";
+const PAD_DOMAIN: &[u8] = b"naor-pinkas-OT-tree";
 
 #[derive(Debug)]
 pub enum TreeOtError {

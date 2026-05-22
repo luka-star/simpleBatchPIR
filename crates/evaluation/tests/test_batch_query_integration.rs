@@ -1,18 +1,15 @@
 #[cfg(test)]
 mod integration_tests {
-    use client::querying::{batch_querying, batch_recovering};
-    use ndarray::Array2;
-    use server_pir::{offline_preprocess::setup_batching, online_process::batch_answering};
-    use shared::rings::Zq;
     use shared::{
         models::Band,
         pbc::{self, gen_schedule},
     };
+    use simplepir::{BatchSimplePIRClient, BatchSimplePIRServer};
     use std::{collections::HashSet, env};
     use tokio_postgres::NoTls;
 
     fn assert_bucket_shapes(
-        setup_res: &[server_pir::offline_preprocess::SetupResult],
+        setup_res: &[simplepir::types::SimplePIRServerSetup],
         buckets: &[ndarray::Array2<shared::rings::Zp>],
         bucket_count: usize,
     ) {
@@ -34,12 +31,12 @@ mod integration_tests {
                 "bucket {bucket_idx} is not square"
             );
             assert_eq!(
-                setup.hint_c.nrows(),
+                setup.hint.nrows(),
                 bucket.nrows(),
                 "bucket {bucket_idx} hint rows must match bucket rows"
             );
             assert_eq!(
-                setup.hint_c.ncols(),
+                setup.hint.ncols(),
                 shared::SEC_PARAM_N,
                 "bucket {bucket_idx} hint width must match security parameter"
             );
@@ -138,28 +135,32 @@ mod integration_tests {
         let b: usize = 1500;
 
         let new_config: pbc::PBCConfig = pbc::PBCConfig::new(b, w);
-        let (setup_res, position_map, buckets, lifted_buckets) =
-            setup_batching(&bands, &new_config);
+        let batch_server = BatchSimplePIRServer::setup(
+            &Band::bands_to_matrix(&bands),
+            Band::SIZEOFRECORD,
+            &new_config,
+        );
 
         let target_bands_idx = [1, 42, 320];
-        assert_bucket_shapes(&setup_res, &buckets, b);
+        assert_bucket_shapes(&batch_server.setups, &batch_server.buckets, b);
         assert_oracle_entries(
             &bands,
             &target_bands_idx,
             &new_config,
-            &position_map,
-            &buckets,
+            &batch_server.position_map,
+            &batch_server.buckets,
         );
 
         let schedule = gen_schedule(&new_config, &target_bands_idx)
             .expect("test targets should admit a batching schedule");
         assert_schedule_invariants(&target_bands_idx, &new_config, &schedule);
 
-        let bucket_element_counts: Vec<usize> = buckets.iter().map(|bucket| bucket.len()).collect();
-        let (states, query_results, batch_schedule) = batch_querying(
+        let bucket_element_counts = batch_server.bucket_element_counts();
+        let (states, query_results, batch_schedule) = BatchSimplePIRClient::query(
             &target_bands_idx,
-            &position_map,
+            &batch_server.position_map,
             &bucket_element_counts,
+            Band::SIZEOFRECORD,
             &new_config,
         );
         let batch_schedule =
@@ -184,8 +185,8 @@ mod integration_tests {
             "each bucket should contain a full SimplePIR query bundle"
         );
 
-        let answers = batch_answering(&query_results, &lifted_buckets);
-        let hint_cs: Vec<Array2<Zq>> = setup_res.iter().map(|r| r.hint_c.clone()).collect();
+        let answers = batch_server.answer(&query_results);
+        let hints = batch_server.hints();
 
         assert_eq!(
             answers.len(),
@@ -197,12 +198,12 @@ mod integration_tests {
             "each bucket should produce a full SimplePIR answer bundle"
         );
 
-        let recovered_row = batch_recovering(
+        let recovered_row = BatchSimplePIRClient::recover(
             &states,
             &answers,
             &target_bands_idx,
             &batch_schedule,
-            &hint_cs,
+            &hints,
         );
 
         assert_eq!(
@@ -213,7 +214,7 @@ mod integration_tests {
         for row in &recovered_row {
             assert_eq!(
                 row.len(),
-                shared::SIZEOFRECORD,
+                Band::SIZEOFRECORD,
                 "each extracted codeword should contain a full record"
             );
         }
