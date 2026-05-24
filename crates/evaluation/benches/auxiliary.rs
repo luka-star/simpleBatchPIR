@@ -4,7 +4,6 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use shared::models::Band;
 use std::path::Path;
 use support::make_bands;
-use tokio::runtime::Runtime;
 
 criterion_group! {
     name = benches;
@@ -18,8 +17,7 @@ criterion_group! {
 }
 
 fn bench_pack_one_entry(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-    let bands = rt.block_on(make_bands(1)).expect("Failed to fetch band");
+    let bands = make_bands(1).expect("Failed to fetch bands");
     let band = &bands[0];
 
     c.bench_function("pack_one", |b| {
@@ -28,8 +26,7 @@ fn bench_pack_one_entry(c: &mut Criterion) {
 }
 
 fn bench_unpack_one_entry(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-    let bands = rt.block_on(make_bands(1)).expect("Failed to fetch band");
+    let bands = make_bands(1).expect("Failed to fetch bands");
     let band = &bands[0];
     let packed = Band::pack_band_to_zp(band);
 
@@ -39,10 +36,7 @@ fn bench_unpack_one_entry(c: &mut Criterion) {
 }
 
 fn bench_matrix_conversion(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-    let bands = rt
-        .block_on(make_bands(1024))
-        .expect("Failed to fetch bands");
+    let bands = make_bands(1024).expect("Failed to fetch bands");
 
     c.bench_function("bands_to_matrix_1024", |b| {
         b.iter(|| Band::bands_to_matrix(black_box(&bands)))

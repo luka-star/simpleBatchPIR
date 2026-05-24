@@ -1,6 +1,6 @@
 use ndarray::{Array1, Array2};
 
-pub use oprf::{OprfQuery, OprfResponse};
+pub use oprf::{BatchOprfQuery, BatchOprfResponse, OprfQuery, OprfResponse};
 pub use shared::keyword::{RecordFetchRequest, SecureKeywordClosure, SecureKeywordIndex};
 use shared::rings::Zq;
 
@@ -15,6 +15,11 @@ pub struct SecureKeywordQueryState {
 #[derive(Debug, Clone)]
 pub struct SecureKeywordOprfState {
     pub(crate) oprf_state: oprf::OprfClientState,
+}
+
+#[derive(Debug, Clone)]
+pub struct SecureKeywordBatchOprfState {
+    pub(crate) oprf_state: oprf::BatchOprfClientState,
 }
 
 pub type SecureKeywordQuery = Vec<Array1<Zq>>;

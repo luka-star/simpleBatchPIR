@@ -9,7 +9,6 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Once;
 use support::{assert_requested_band_count, make_bands, random_index_list};
-use tokio::runtime::Runtime;
 
 criterion_group! {
     name = benches;
@@ -57,10 +56,7 @@ struct FailureRateRecord {
 }
 
 fn load_bands(nr_bands: usize) -> Vec<shared::models::Band> {
-    let rt = Runtime::new().unwrap();
-    let bands = rt
-        .block_on(make_bands(nr_bands))
-        .expect("Failed to fetch bands");
+    let bands = make_bands(nr_bands).expect("Failed to fetch bands");
     assert_requested_band_count(nr_bands, bands.len());
     bands
 }

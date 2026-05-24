@@ -6,7 +6,6 @@ use shared::pbc;
 use simplepir::{BatchSimplePIRClient, BatchSimplePIRServer, SimplePIRClient, SimplePIRServer};
 use std::path::Path;
 use support::{assert_requested_band_count, make_bands, random_index_list};
-use tokio::runtime::Runtime;
 
 criterion_group! {
     name = benches;
@@ -25,10 +24,7 @@ fn multiple_query(c: &mut Criterion) {
         let mut group = c.benchmark_group(format!("multiple_query_simplepir/db_{nr_bands}"));
 
         for nr_indices in NUMBER_OF_ITEMS {
-            let rt = Runtime::new().unwrap();
-            let bands = rt
-                .block_on(make_bands(nr_bands))
-                .expect("Failed to fetch bands");
+            let bands = make_bands(nr_bands).expect("Failed to fetch bands");
             assert_requested_band_count(nr_bands, bands.len());
             let pir_server = SimplePIRServer::setup(Band::bands_to_matrix(&bands));
             let index_list = random_index_list(nr_indices, bands.len());
@@ -64,10 +60,7 @@ fn multiple_query(c: &mut Criterion) {
         let mut group = c.benchmark_group(format!("multiple_query_batchpir/db_{nr_bands}"));
 
         for nr_indices in NUMBER_OF_ITEMS {
-            let rt = Runtime::new().unwrap();
-            let bands = rt
-                .block_on(make_bands(nr_bands))
-                .expect("Failed to fetch bands");
+            let bands = make_bands(nr_bands).expect("Failed to fetch bands");
             assert_requested_band_count(nr_bands, bands.len());
             let config = pbc::PBCConfig::new(1500, 3);
             let batch_server = BatchSimplePIRServer::setup(

@@ -1,4 +1,4 @@
-use oprf::{OprfQuery, OprfResponse, OprfServer};
+use oprf::{BatchOprfQuery, BatchOprfResponse, OprfQuery, OprfResponse, OprfServer};
 use rand::thread_rng;
 use shared::keyword::{
     build_perfect_hash, collect_keywords, pack_keyword_blocks_into_square_matrix,
@@ -47,6 +47,14 @@ impl SecureKeywordServer {
     pub fn answer_oprf(&mut self, query: &OprfQuery) -> Result<OprfResponse, oprf::OprfError> {
         let mut rng = thread_rng();
         self.setup.oprf.answer(query, &mut rng)
+    }
+
+    pub fn answer_batch_oprf(
+        &mut self,
+        query: &BatchOprfQuery,
+    ) -> Result<BatchOprfResponse, oprf::OprfError> {
+        let mut rng = thread_rng();
+        self.setup.oprf.answer_batch(query, &mut rng)
     }
 
     pub fn answer(&self, query: &SecureKeywordQuery) -> SecureKeywordAnswer {

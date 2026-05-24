@@ -3,7 +3,7 @@
 use rand::{seq::index::sample, Rng};
 use shared::models::Band;
 use std::env;
-use tokio_postgres::{Error, NoTls};
+use postgres::{Error, NoTls};
 
 fn table_for_size(nr_bands: usize) -> String {
     match nr_bands {
@@ -12,48 +12,38 @@ fn table_for_size(nr_bands: usize) -> String {
     }
 }
 
-pub async fn make_bands(nr_bands: usize) -> Result<Vec<Band>, Error> {
+pub fn make_bands(nr_bands: usize) -> Result<Vec<Band>, Error> {
     let database_url = env::var("DATABASE_URL")
         .unwrap_or_else(|_| "host=localhost user=user password=password dbname=pir_db".to_string());
 
-    let (client, connection) = tokio_postgres::connect(&database_url, NoTls).await?;
-
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("Database connection error: {}", e);
-        }
-    });
+    let mut client = postgres::Client::connect(&database_url, NoTls)?;
 
     let table_name = table_for_size(nr_bands);
     let query = format!(
-        "SELECT band_index, band_name, fans, formed, style, origin, split
+        "SELECT band_index, band_name, country, genre, status
          FROM (
              SELECT
                  band_index,
                  band_name,
-                 fans::INT AS fans,
-                 formed::INT AS formed,
-                 style,
-                 origin,
-                 split::INT AS split
+                 country,
+                 genre,
+                 status
              FROM {table_name}
          ) src
          ORDER BY band_index ASC
          LIMIT $1"
     );
 
-    let rows = client.query(&query, &[&(nr_bands as i64)]).await?;
+    let rows = client.query(&query, &[&(nr_bands as i64)])?;
 
     let bands: Vec<Band> = rows
         .iter()
         .map(|row| Band {
             id: row.get(0),
             name: row.get(1),
-            fans: row.get(2),
-            formed: row.get(3),
-            style: row.get(4),
-            origin: row.get(5),
-            split: row.get(6),
+            country: row.get(2),
+            genre: row.get(3),
+            status: row.get(4),
         })
         .collect();
 

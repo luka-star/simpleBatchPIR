@@ -6,7 +6,6 @@ use shared::pbc;
 use simplepir::{BatchSimplePIRServer, SimplePIRServer};
 use std::path::Path;
 use support::{assert_requested_band_count, make_bands};
-use tokio::runtime::Runtime;
 
 criterion_group! {
     name = benches;
@@ -30,10 +29,7 @@ fn offline_setup(c: &mut Criterion) {
             &nr_bands,
             |b, &nr_bands| {
                 b.iter(|| {
-                    let rt = Runtime::new().unwrap();
-                    let bands = rt
-                        .block_on(make_bands(nr_bands))
-                        .expect("Failed to fetch bands");
+                    let bands = make_bands(nr_bands).expect("Failed to fetch bands");
                     assert_requested_band_count(nr_bands, bands.len());
                     SimplePIRServer::setup(black_box(Band::bands_to_matrix(&bands)))
                 })
@@ -47,10 +43,7 @@ fn offline_setup(c: &mut Criterion) {
             &nr_bands,
             |b, &nr_bands| {
                 b.iter(|| {
-                    let rt = Runtime::new().unwrap();
-                    let bands = rt
-                        .block_on(make_bands(nr_bands))
-                        .expect("Failed to fetch bands");
+                    let bands = make_bands(nr_bands).expect("Failed to fetch bands");
                     assert_requested_band_count(nr_bands, bands.len());
                     let config = pbc::PBCConfig::new(1500, 3);
                     let db = Band::bands_to_matrix(&bands);

@@ -7,8 +7,7 @@ edition = "2021"
 shared = { path = "../shared" }
 keyword_search = { path = "../keyword_search" }
 simplepir = { path = "../simplepir" }
-tokio = { version = "1", features = ["full"] }
-tokio-postgres = "0.7"
+postgres = "0.19"
 criterion = { version = "0.5", features = ["csv_output"] }
 ndarray = "0.16"
 rand = "0.8"

@@ -1,13 +1,15 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::hash::{BuildHasher, Hash, Hasher};
+use rand::Rng;
 
 use ahash::RandomState;
 
 #[derive(Clone)]
 pub struct PBCConfig {
     pub buckets: usize,
-    pub seeds: Vec<u64>,
+    pub seeds: Vec<u64>
 }
+
 impl PBCConfig {
     pub fn new(buckets: usize, w: usize) -> Self {
         let seeds = (0..w)
@@ -40,25 +42,43 @@ pub fn gen_schedule<T: Hash + Copy + Eq>(
     config: &PBCConfig,
     indices: &[T],
 ) -> Result<HashMap<T, usize>, String> {
-    let mut used_buckets = HashSet::new();
-    let mut schedule = HashMap::new();
+    let max_evict = config.buckets / 3;
+    let mut occupied_bucket: HashMap<usize, T> = HashMap::new();
+    let mut schedule: HashMap<T, usize> = HashMap::new();
 
     for &index in indices {
-        let mut placed = false;
-
-        for bucket in config.bucket_positions(&index) {
-            if !used_buckets.contains(&bucket) {
-                schedule.insert(index, bucket);
-                used_buckets.insert(bucket);
-                placed = true;
-                break;
-            }
-        }
-
-        if !placed {
-            return Err("Could not generate a schedule :(".to_string());
-        }
+        insert_cuckoo(config, index, max_evict, &mut occupied_bucket, &mut schedule)?;
     }
 
     Ok(schedule)
+}
+
+fn insert_cuckoo<T: Hash + Copy + Eq>(
+    config: &PBCConfig,
+    mut index: T,
+    max_evict: usize,
+    occupied_bucket: &mut HashMap<usize, T>,
+    schedule: &mut HashMap<T, usize>,
+) -> Result<(), String> {
+    let mut rng = rand::thread_rng();
+    for _ in 0..max_evict {
+        let candidates = config.bucket_positions(&index);
+        if candidates.is_empty() {
+            return Err("No candidate buckets".to_string());
+        }
+        if let Some(bucket) = candidates
+            .iter()
+            .find(|bucket| !occupied_bucket.contains_key(bucket))
+        {
+            occupied_bucket.insert(*bucket, index);
+            schedule.insert(index, *bucket);
+            return Ok(());
+        }
+        let bucket = candidates[rng.gen_range(0..candidates.len())];
+        let evicted = occupied_bucket.insert(bucket, index).unwrap();
+        schedule.insert(index, bucket);
+        schedule.remove(&evicted);
+        index = evicted;
+    }
+    Err("Could not generate a cuckoo schedule".to_string())
 }
