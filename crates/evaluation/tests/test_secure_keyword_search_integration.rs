@@ -3,10 +3,10 @@ mod integration_tests {
     use keyword_search::{
         PlainKeywordClient, PlainKeywordServer, SecureKeywordClient, SecureKeywordServer,
     };
+    use postgres::NoTls;
     use shared::{models::Band, pbc::PBCConfig};
     use simplepir::{BatchSimplePIRClient, BatchSimplePIRServer};
     use std::env;
-    use postgres::NoTls;
 
     #[test]
     fn test_secure_keyword_search_pipeline_on_real_1024_row_dataset(
@@ -16,8 +16,8 @@ mod integration_tests {
         });
         let keyword = env::var("KEYWORD").unwrap_or_else(|_| "heavy".to_string());
 
-        let mut client = postgres::Client::connect(&database_url, NoTls)
-            .expect("Failed to connect to Postgres");
+        let mut client =
+            postgres::Client::connect(&database_url, NoTls).expect("Failed to connect to Postgres");
 
         let query_string = "SELECT band_index, band_name, country, genre, status \
                             FROM data_10 ORDER BY band_index ASC";
@@ -37,29 +37,30 @@ mod integration_tests {
         let keyword_mapping = shared::models::construct_keyword_mapping(&bands);
 
         let plain_server = PlainKeywordServer::setup(&keyword_mapping);
-        let plain_closure = plain_server.closure();
+        let plain_client_context = plain_server.client_context();
 
-        let (plain_state, plain_queries) = PlainKeywordClient::query(&keyword, &plain_closure)
-            .expect("keyword should exist in the plaintext keyword index");
+        let (plain_state, plain_queries) =
+            PlainKeywordClient::query(&keyword, &plain_client_context)
+                .expect("keyword should exist in the plaintext keyword index");
         let plain_answers = plain_server.answer(&plain_queries);
         let plain_record_fetch_request = PlainKeywordClient::recover(
             &plain_state,
-            &plain_closure,
+            &plain_client_context,
             plain_server.pir.hint(),
             &plain_answers,
         );
 
         let mut secure_server = SecureKeywordServer::setup(&keyword_mapping);
-        let secure_closure = secure_server.closure();
+        let secure_client_context = secure_server.client_context();
         let (secure_oprf_state, secure_oprf_query) =
-            SecureKeywordClient::start_oprf(&keyword, &secure_closure)
+            SecureKeywordClient::start_oprf(&keyword, &secure_client_context)
                 .expect("keyword should normalize for secure keyword query");
         let secure_oprf_response = secure_server
             .answer_oprf(&secure_oprf_query)
             .expect("secure keyword OPRF should answer");
         let (secure_state, secure_queries) = SecureKeywordClient::finish_query(
             secure_oprf_state,
-            &secure_closure,
+            &secure_client_context,
             &secure_oprf_response,
         )
         .expect("secure keyword OPRF should recover")
@@ -67,25 +68,24 @@ mod integration_tests {
         let secure_answers = secure_server.answer(&secure_queries);
         let secure_record_fetch_request = SecureKeywordClient::recover(
             &secure_state,
-            &secure_closure,
+            &secure_client_context,
             secure_server.setup.pir.hint(),
             &secure_answers,
         );
 
         println!("keyword: {}", keyword);
         println!(
-            "plaintext recovered posting ids: {:?}",
-            plain_record_fetch_request.record_ids()
+            "plaintext recovered record indices: {:?}",
+            plain_record_fetch_request
         );
         println!(
-            "secure recovered posting ids: {:?}",
-            secure_record_fetch_request.record_ids()
+            "secure recovered record indices: {:?}",
+            secure_record_fetch_request
         );
 
         assert_eq!(
-            secure_record_fetch_request.record_ids(),
-            plain_record_fetch_request.record_ids(),
-            "secure keyword search should recover the same posting ids as plaintext keyword search"
+            secure_record_fetch_request, plain_record_fetch_request,
+            "secure keyword search should recover the same record indices as plaintext keyword search"
         );
 
         assert!(
@@ -93,17 +93,17 @@ mod integration_tests {
             "secure keyword search should recover at least one band for the chosen keyword"
         );
 
-        let config = PBCConfig::new(1500, 3);
+        let config = PBCConfig::random_seeds(1500, 3);
         let batch_server = BatchSimplePIRServer::setup(
             &Band::bands_to_matrix(&bands),
             Band::SIZEOFRECORD,
             &config,
         );
-        let bucket_element_counts = batch_server.bucket_element_counts();
+        let bucket_size = batch_server.bucket_size();
         let (states, query_results, batch_schedule) = BatchSimplePIRClient::query(
-            secure_record_fetch_request.record_ids(),
+            &secure_record_fetch_request,
             &batch_server.position_map,
-            &bucket_element_counts,
+            bucket_size,
             Band::SIZEOFRECORD,
             &config,
         );
@@ -113,7 +113,7 @@ mod integration_tests {
         let recovered_rows = BatchSimplePIRClient::recover(
             &states,
             &answers,
-            secure_record_fetch_request.record_ids(),
+            &secure_record_fetch_request,
             &batch_schedule,
             &hint_cs,
         );

@@ -1,12 +1,12 @@
 mod support;
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use postgres::NoTls;
 use shared::models::Band;
 use simplepir::{SimplePIRClient, SimplePIRServer};
 use std::env;
 use std::path::Path;
 use support::{assert_requested_band_count, make_bands, random_idx};
-use postgres::NoTls;
 
 criterion_group! {
     name = benches;

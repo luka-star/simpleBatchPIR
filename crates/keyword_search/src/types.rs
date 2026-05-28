@@ -1,1 +1,3 @@
-pub use shared::keyword::{KeywordClosure, RecordFetchRequest, RecordId, SecureKeywordClosure};
+pub use shared::keyword::{
+    KeywordClientContext, RecordIdx, RecordIdxList, SecureKeywordClientContext,
+};

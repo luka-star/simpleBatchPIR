@@ -1,27 +1,33 @@
-use shared::keyword::{build_keyword_index, KeywordClosure, KeywordIndex, RecordId};
-use simplepir::SimplePIRServer;
+use shared::keyword::{
+    build_keyword_database, KeywordClientContext, KeywordDatabase, RecordIdxList,
+};
+use simplepir::{
+    types::{SimplePIRRecordAnswer, SimplePIRRecordQuery},
+    SimplePIRServer,
+};
 use std::collections::HashMap;
 
-use super::types::{PlainKeywordAnswer, PlainKeywordQuery};
-
 pub struct PlainKeywordServer {
-    pub index: KeywordIndex,
+    pub keyword_database: KeywordDatabase,
     pub pir: SimplePIRServer,
 }
 
 impl PlainKeywordServer {
-    pub fn setup(mapping: &HashMap<String, Vec<RecordId>>) -> Self {
-        let index = build_keyword_index(mapping);
-        let pir = SimplePIRServer::setup(index.matrix.clone());
+    pub fn setup(mapping: &HashMap<String, RecordIdxList>) -> Self {
+        let keyword_database = build_keyword_database(mapping);
+        let pir = SimplePIRServer::setup(keyword_database.matrix.clone());
 
-        Self { index, pir }
+        Self {
+            keyword_database,
+            pir,
+        }
     }
 
-    pub fn closure(&self) -> KeywordClosure {
-        self.index.closure()
+    pub fn client_context(&self) -> KeywordClientContext {
+        self.keyword_database.client_context()
     }
 
-    pub fn answer(&self, query: &PlainKeywordQuery) -> PlainKeywordAnswer {
+    pub fn answer(&self, query: &SimplePIRRecordQuery) -> SimplePIRRecordAnswer {
         self.pir.answer(query)
     }
 }

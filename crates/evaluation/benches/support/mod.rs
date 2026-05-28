@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
+use postgres::{Error, NoTls};
 use rand::{seq::index::sample, Rng};
 use shared::models::Band;
 use std::env;
-use postgres::{Error, NoTls};
 
 fn table_for_size(nr_bands: usize) -> String {
     match nr_bands {

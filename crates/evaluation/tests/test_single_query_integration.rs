@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod integration_tests {
+    use postgres::NoTls;
     use shared::models::Band;
     use simplepir::{SimplePIRClient, SimplePIRServer};
     use std::env;
-    use postgres::NoTls;
 
     #[test]
     fn test_full_pir_pipeline() -> Result<(), Box<dyn std::error::Error>> {
@@ -11,8 +11,8 @@ mod integration_tests {
             "host=localhost user=user password=password dbname=pir_db".to_string()
         });
 
-        let mut client = postgres::Client::connect(&database_url, NoTls)
-            .expect("Failed to connect to Postgres");
+        let mut client =
+            postgres::Client::connect(&database_url, NoTls).expect("Failed to connect to Postgres");
 
         let exp = 10;
 

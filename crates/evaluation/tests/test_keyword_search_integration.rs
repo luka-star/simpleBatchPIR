@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod integration_tests {
     use keyword_search::{PlainKeywordClient, PlainKeywordServer};
+    use postgres::NoTls;
     use shared::{models::Band, pbc::PBCConfig};
     use simplepir::{BatchSimplePIRClient, BatchSimplePIRServer};
     use std::env;
-    use postgres::NoTls;
 
     #[test]
     fn test_keyword_search_pipeline_on_real_1024_row_dataset(
@@ -14,8 +14,8 @@ mod integration_tests {
         });
         let keyword = env::var("KEYWORD").unwrap_or_else(|_| "heavy".to_string());
 
-        let mut client = postgres::Client::connect(&database_url, NoTls)
-            .expect("Failed to connect to Postgres");
+        let mut client =
+            postgres::Client::connect(&database_url, NoTls).expect("Failed to connect to Postgres");
 
         let query_string = "SELECT band_index, band_name, country, genre, status \
                             FROM data_10 ORDER BY band_index ASC";
@@ -33,14 +33,14 @@ mod integration_tests {
             .collect();
         let keyword_mapping = shared::models::construct_keyword_mapping(&bands);
         let keyword_server = PlainKeywordServer::setup(&keyword_mapping);
-        let keyword_closure = keyword_server.closure();
+        let keyword_client_context = keyword_server.client_context();
 
-        let (state, queries) = PlainKeywordClient::query(&keyword, &keyword_closure)
+        let (state, queries) = PlainKeywordClient::query(&keyword, &keyword_client_context)
             .expect("keyword should exist in the keyword index");
         let answers = keyword_server.answer(&queries);
         let record_fetch_request = PlainKeywordClient::recover(
             &state,
-            &keyword_closure,
+            &keyword_client_context,
             keyword_server.pir.hint(),
             &answers,
         );
@@ -48,29 +48,26 @@ mod integration_tests {
         println!("keyword: {}", keyword);
         println!(
             "normalized slot count: {}",
-            keyword_server.index.perfect_hash.len()
+            keyword_server.keyword_database.perfect_hash.len()
         );
-        println!(
-            "recovered posting ids: {:?}",
-            record_fetch_request.record_ids()
-        );
+        println!("recovered record indices: {:?}", record_fetch_request);
 
         assert!(
             !record_fetch_request.is_empty(),
             "keyword search should recover at least one band for the chosen keyword"
         );
 
-        let config = PBCConfig::new(1500, 3);
+        let config = PBCConfig::random_seeds(1500, 3);
         let batch_server = BatchSimplePIRServer::setup(
             &Band::bands_to_matrix(&bands),
             Band::SIZEOFRECORD,
             &config,
         );
-        let bucket_element_counts = batch_server.bucket_element_counts();
+        let bucket_size = batch_server.bucket_size();
         let (states, query_results, batch_schedule) = BatchSimplePIRClient::query(
-            record_fetch_request.record_ids(),
+            &record_fetch_request,
             &batch_server.position_map,
-            &bucket_element_counts,
+            bucket_size,
             Band::SIZEOFRECORD,
             &config,
         );
@@ -80,7 +77,7 @@ mod integration_tests {
         let recovered_rows = BatchSimplePIRClient::recover(
             &states,
             &answers,
-            record_fetch_request.record_ids(),
+            &record_fetch_request,
             &batch_schedule,
             &hint_cs,
         );

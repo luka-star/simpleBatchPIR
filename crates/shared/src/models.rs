@@ -1,5 +1,6 @@
+use crate::keyword::RecordIdx;
 use crate::rings::Zp;
-use crate::{keyword::RecordId, tokenize_text};
+use crate::tokenize_text;
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -122,8 +123,8 @@ pub fn tokenize_band(band: &Band) -> Vec<String> {
     tokens
 }
 
-pub fn construct_keyword_mapping(db: &[Band]) -> HashMap<String, Vec<RecordId>> {
-    let mut mapping: HashMap<String, Vec<RecordId>> = HashMap::new();
+pub fn construct_keyword_mapping(db: &[Band]) -> HashMap<String, Vec<RecordIdx>> {
+    let mut mapping: HashMap<String, Vec<RecordIdx>> = HashMap::new();
 
     for band in db {
         for token in tokenize_band(band) {

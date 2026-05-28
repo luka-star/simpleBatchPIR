@@ -40,7 +40,7 @@ impl BatchSimplePIRClient {
     pub fn query(
         indices: &[usize],
         position_map: &BatchSimplePIRBucketOracle,
-        bucket_element_counts: &[usize],
+        bucket_size: usize,
         record_cell_count: usize,
         config: &PBCConfig,
     ) -> (
@@ -51,7 +51,7 @@ impl BatchSimplePIRClient {
         batch_query(
             indices,
             position_map,
-            bucket_element_counts,
+            bucket_size,
             record_cell_count,
             config,
         )
@@ -141,7 +141,7 @@ fn oracle_index(bucket: usize, record: usize, map: &BatchSimplePIRBucketOracle) 
 fn batch_query(
     indices: &[usize],
     position_map: &BatchSimplePIRBucketOracle,
-    bucket_element_counts: &[usize],
+    bucket_size: usize,
     record_cell_count: usize,
     config: &PBCConfig,
 ) -> (
@@ -161,9 +161,8 @@ fn batch_query(
     let mut states = Vec::with_capacity(config.buckets);
     let mut queries = Vec::with_capacity(config.buckets);
     for bucket in 0..config.buckets {
-        let bucket_elements = bucket_element_counts[bucket];
-        let bucket_root = (bucket_elements as f64).sqrt().ceil() as usize;
-        let bucket_capacity = (bucket_elements / record_cell_count).max(1);
+        let bucket_root = (bucket_size as f64).sqrt().ceil() as usize;
+        let bucket_capacity = (bucket_size / record_cell_count).max(1);
         let record_index = if let Some(index) = bucket_to_index.get(&bucket) {
             oracle_index(bucket, *index, position_map).expect("Missing oracle index")
         } else {
@@ -194,10 +193,17 @@ fn query_record(
     square_n: usize,
 ) -> (SimplePIRClientState, SimplePIRRecordQuery) {
     let a_matrix: Array2<shared::rings::Zq> = compute_a(square_n);
-    let mut whole_query = Vec::with_capacity(square_n);
-    let mut secrets = Vec::with_capacity(square_n);
+    let mut queried_columns = Vec::with_capacity(cell_count.min(square_n));
+    for (_, col_idx) in block_positions(start_cell, cell_count, square_n) {
+        if !queried_columns.contains(&col_idx) {
+            queried_columns.push(col_idx);
+        }
+    }
 
-    for i_col in 0..square_n {
+    let mut whole_query = Vec::with_capacity(queried_columns.len());
+    let mut secrets = Vec::with_capacity(queried_columns.len());
+
+    for &i_col in &queried_columns {
         let (query, secret) = single_query(i_col, &a_matrix, square_n);
         whole_query.push(query);
         secrets.push(secret);
@@ -205,6 +211,7 @@ fn query_record(
 
     let state = SimplePIRClientState {
         s: secrets,
+        queried_columns,
         start_cell,
         cell_count,
         square_n,
@@ -222,7 +229,13 @@ fn recover_record(
     let mut recovered = Array1::zeros(state.cell_count);
 
     for (offset, (row_idx, col_idx)) in positions.into_iter().enumerate() {
-        recovered[offset] = recover_single(&state.s[col_idx], row_idx, hint, &answers[col_idx]);
+        let answer_idx = state
+            .queried_columns
+            .iter()
+            .position(|&queried_col| queried_col == col_idx)
+            .expect("missing answer for queried record column");
+        recovered[offset] =
+            recover_single(&state.s[answer_idx], row_idx, hint, &answers[answer_idx]);
     }
 
     recovered.to_vec()

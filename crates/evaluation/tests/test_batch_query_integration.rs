@@ -1,20 +1,20 @@
 #[cfg(test)]
 mod integration_tests {
+    use postgres::NoTls;
     use shared::{
         models::Band,
         pbc::{self, gen_schedule},
     };
     use simplepir::{BatchSimplePIRClient, BatchSimplePIRServer};
     use std::{collections::HashSet, env};
-    use postgres::NoTls;
 
     fn assert_bucket_shapes(
-        setup_res: &[simplepir::types::SimplePIRServerSetup],
+        hints: &[simplepir::types::SimplePIRHint],
         buckets: &[ndarray::Array2<shared::rings::Zp>],
         bucket_count: usize,
     ) {
         assert_eq!(
-            setup_res.len(),
+            hints.len(),
             bucket_count,
             "setup must return one result per bucket"
         );
@@ -24,19 +24,19 @@ mod integration_tests {
             "encoding must return one matrix per bucket"
         );
 
-        for (bucket_idx, (setup, bucket)) in setup_res.iter().zip(buckets.iter()).enumerate() {
+        for (bucket_idx, (hint, bucket)) in hints.iter().zip(buckets.iter()).enumerate() {
             assert_eq!(
                 bucket.nrows(),
                 bucket.ncols(),
                 "bucket {bucket_idx} is not square"
             );
             assert_eq!(
-                setup.hint.nrows(),
+                hint.nrows(),
                 bucket.nrows(),
                 "bucket {bucket_idx} hint rows must match bucket rows"
             );
             assert_eq!(
-                setup.hint.ncols(),
+                hint.ncols(),
                 shared::SEC_PARAM_N,
                 "bucket {bucket_idx} hint width must match security parameter"
             );
@@ -99,8 +99,8 @@ mod integration_tests {
             "host=localhost user=user password=password dbname=pir_db".to_string()
         });
 
-        let mut client = postgres::Client::connect(&database_url, NoTls)
-            .expect("Failed to connect to Postgres");
+        let mut client =
+            postgres::Client::connect(&database_url, NoTls).expect("Failed to connect to Postgres");
 
         let exp = 10;
 
@@ -125,7 +125,7 @@ mod integration_tests {
         let w: usize = 3;
         let b: usize = 1500;
 
-        let new_config: pbc::PBCConfig = pbc::PBCConfig::new(b, w);
+        let new_config: pbc::PBCConfig = pbc::PBCConfig::random_seeds(b, w);
         let batch_server = BatchSimplePIRServer::setup(
             &Band::bands_to_matrix(&bands),
             Band::SIZEOFRECORD,
@@ -133,7 +133,7 @@ mod integration_tests {
         );
 
         let target_bands_idx = [1, 42, 320];
-        assert_bucket_shapes(&batch_server.setups, &batch_server.buckets, b);
+        assert_bucket_shapes(&batch_server.hints, &batch_server.buckets, b);
         assert_oracle_entries(
             &bands,
             &target_bands_idx,
@@ -146,11 +146,11 @@ mod integration_tests {
             .expect("test targets should admit a batching schedule");
         assert_schedule_invariants(&target_bands_idx, &new_config, &schedule);
 
-        let bucket_element_counts = batch_server.bucket_element_counts();
+        let bucket_size = batch_server.bucket_size();
         let (states, query_results, batch_schedule) = BatchSimplePIRClient::query(
             &target_bands_idx,
             &batch_server.position_map,
-            &bucket_element_counts,
+            bucket_size,
             Band::SIZEOFRECORD,
             &new_config,
         );

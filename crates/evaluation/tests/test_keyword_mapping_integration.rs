@@ -1,19 +1,18 @@
 #[cfg(test)]
 mod integration_tests {
+    use postgres::NoTls;
     use shared::models::construct_keyword_mapping;
     use shared::models::Band;
     use std::{collections::BTreeMap, env};
-    use postgres::NoTls;
 
     #[test]
-    fn test_keyword_mapping_on_real_1024_row_dataset(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_keyword_mapping_on_real_1024_row_dataset() -> Result<(), Box<dyn std::error::Error>> {
         let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
             "host=localhost user=user password=password dbname=pir_db".to_string()
         });
 
-        let mut client = postgres::Client::connect(&database_url, NoTls)
-            .expect("Failed to connect to Postgres");
+        let mut client =
+            postgres::Client::connect(&database_url, NoTls).expect("Failed to connect to Postgres");
 
         let query_string = "SELECT band_index, band_name, country, genre, status \
                             FROM data_10 ORDER BY band_index ASC";

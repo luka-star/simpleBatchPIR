@@ -62,14 +62,14 @@ fn multiple_query(c: &mut Criterion) {
         for nr_indices in NUMBER_OF_ITEMS {
             let bands = make_bands(nr_bands).expect("Failed to fetch bands");
             assert_requested_band_count(nr_bands, bands.len());
-            let config = pbc::PBCConfig::new(1500, 3);
+            let config = pbc::PBCConfig::fixed_seeds(1500, 3);
             let batch_server = BatchSimplePIRServer::setup(
                 &Band::bands_to_matrix(&bands),
                 Band::SIZEOFRECORD,
                 &config,
             );
             let index_list = random_index_list(nr_indices, bands.len());
-            let bucket_element_counts = batch_server.bucket_element_counts();
+            let bucket_size = batch_server.bucket_size();
             let hint_cs = batch_server.hints();
 
             group.bench_with_input(
@@ -80,7 +80,7 @@ fn multiple_query(c: &mut Criterion) {
                         let (states, queries, schedule) = BatchSimplePIRClient::query(
                             black_box(&index_list),
                             black_box(&batch_server.position_map),
-                            black_box(&bucket_element_counts),
+                            black_box(bucket_size),
                             black_box(Band::SIZEOFRECORD),
                             black_box(&config),
                         );

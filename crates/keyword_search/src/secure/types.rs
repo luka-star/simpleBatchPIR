@@ -1,14 +1,12 @@
-use ndarray::{Array1, Array2};
-
 pub use oprf::{BatchOprfQuery, BatchOprfResponse, OprfQuery, OprfResponse};
-pub use shared::keyword::{RecordFetchRequest, SecureKeywordClosure, SecureKeywordIndex};
-use shared::rings::Zq;
-
-use crate::plain::types::PlainKeywordClientState;
+pub use shared::keyword::{RecordIdxList, SecureKeywordClientContext, SecureKeywordDatabase};
+use simplepir::types::{
+    SimplePIRClientState, SimplePIRHint, SimplePIRRecordAnswer, SimplePIRRecordQuery,
+};
 
 #[derive(Debug, Clone)]
 pub struct SecureKeywordQueryState {
-    pub keyword_state: PlainKeywordClientState,
+    pub keyword_state: SimplePIRClientState,
     pub p_hat: Vec<u8>,
 }
 
@@ -22,6 +20,6 @@ pub struct SecureKeywordBatchOprfState {
     pub(crate) oprf_state: oprf::BatchOprfClientState,
 }
 
-pub type SecureKeywordQuery = Vec<Array1<Zq>>;
-pub type SecureKeywordAnswer = Vec<Array1<Zq>>;
-pub type SecureKeywordHint = Array2<Zq>;
+pub type SecureKeywordQuery = SimplePIRRecordQuery;
+pub type SecureKeywordAnswer = SimplePIRRecordAnswer;
+pub type SecureKeywordHint = SimplePIRHint;

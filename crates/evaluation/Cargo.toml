@@ -36,3 +36,8 @@ harness = false
 name = "batching_vars"
 path = "benches/batching_vars.rs"
 harness = false
+
+[[bench]]
+name = "bucket_padding"
+path = "benches/bucket_padding.rs"
+harness = false

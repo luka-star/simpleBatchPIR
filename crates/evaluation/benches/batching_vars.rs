@@ -152,7 +152,7 @@ fn export_failure_rate_data() {
             let bucket_count = (db_size * num) / den;
 
             for w in FAILURE_HASH_FUNCTION_COUNTS {
-                let config = pbc::PBCConfig::new(bucket_count, w);
+                let config = pbc::PBCConfig::fixed_seeds(bucket_count, w);
 
                 for nr_indices in FAILURE_QUERY_BATCH_SIZES {
                     records.push(compute_failure_rate(
@@ -195,7 +195,7 @@ fn setup_vars(c: &mut Criterion) {
 
     for w in HASH_FUNCTION_COUNTS {
         for bucket_count in BUCKET_COUNTS {
-            let config = pbc::PBCConfig::new(bucket_count, w);
+            let config = pbc::PBCConfig::fixed_seeds(bucket_count, w);
 
             group.bench_with_input(
                 BenchmarkId::new(format!("w_{w}"), bucket_count),
@@ -226,13 +226,13 @@ fn multiple_query(c: &mut Criterion) {
 
     for w in HASH_FUNCTION_COUNTS {
         for bucket_count in BUCKET_COUNTS {
-            let config = pbc::PBCConfig::new(bucket_count, w);
+            let config = pbc::PBCConfig::fixed_seeds(bucket_count, w);
             let batch_server = BatchSimplePIRServer::setup(
                 &Band::bands_to_matrix(&bands),
                 Band::SIZEOFRECORD,
                 &config,
             );
-            let bucket_element_counts = batch_server.bucket_element_counts();
+            let bucket_size = batch_server.bucket_size();
             let hint_cs = batch_server.hints();
             let mut group = c.benchmark_group(format!(
                 "multiple_query_batchpir/db_{NUMBER_OF_BANDS}/w_{w}/b_{bucket_count}"
@@ -256,7 +256,7 @@ fn multiple_query(c: &mut Criterion) {
                             let (states, queries, schedule) = BatchSimplePIRClient::query(
                                 black_box(&index_list),
                                 black_box(&batch_server.position_map),
-                                black_box(&bucket_element_counts),
+                                black_box(bucket_size),
                                 black_box(Band::SIZEOFRECORD),
                                 black_box(&config),
                             );

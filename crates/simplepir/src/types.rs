@@ -7,13 +7,10 @@ use shared::rings::{Zp, Zq};
 #[derive(Debug, Clone)]
 pub struct SimplePIRClientState {
     pub s: Vec<Array1<Zq>>,
+    pub queried_columns: Vec<usize>,
     pub start_cell: usize,
     pub cell_count: usize,
     pub square_n: usize,
-}
-
-pub struct SimplePIRServerSetup {
-    pub hint: Array2<Zq>,
 }
 
 pub type SimplePIRDatabase = Array2<Zp>;
@@ -26,6 +23,7 @@ pub type SimplePIRAnswer = Array1<Zq>;
 pub type SimplePIRRecordQuery = Vec<SimplePIRQuery>;
 pub type SimplePIRRecordAnswer = Vec<SimplePIRAnswer>;
 
+pub type BatchSimplePIRHint = Vec<SimplePIRHint>;
 pub type BatchSimplePIRQuery = Vec<SimplePIRRecordQuery>;
 pub type BatchSimplePIRAnswer = Vec<SimplePIRRecordAnswer>;
 

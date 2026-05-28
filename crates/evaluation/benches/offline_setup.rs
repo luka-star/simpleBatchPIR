@@ -45,7 +45,7 @@ fn offline_setup(c: &mut Criterion) {
                 b.iter(|| {
                     let bands = make_bands(nr_bands).expect("Failed to fetch bands");
                     assert_requested_band_count(nr_bands, bands.len());
-                    let config = pbc::PBCConfig::new(1500, 3);
+                    let config = pbc::PBCConfig::fixed_seeds(1500, 3);
                     let db = Band::bands_to_matrix(&bands);
                     BatchSimplePIRServer::setup(
                         black_box(&db),
