@@ -259,9 +259,8 @@ fn multiple_query(c: &mut Criterion) {
                                 black_box(bucket_size),
                                 black_box(Band::SIZEOFRECORD),
                                 black_box(&config),
-                            );
-                            let schedule =
-                                schedule.expect("batch querying should succeed in benchmark");
+                            )
+                            .expect("batch querying should succeed in benchmark");
                             let answers = batch_server.answer(black_box(&queries));
                             BatchSimplePIRClient::recover(
                                 black_box(&states),

@@ -153,9 +153,8 @@ mod integration_tests {
             bucket_size,
             Band::SIZEOFRECORD,
             &new_config,
-        );
-        let batch_schedule =
-            batch_schedule.expect("batch querying should surface schedule success");
+        )
+        .expect("batch querying should surface schedule success");
 
         assert_eq!(
             batch_schedule, schedule,

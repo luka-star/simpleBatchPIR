@@ -1,10 +1,11 @@
-use oprf::{MaskedKeyword, OprfError};
+use oprf::{MaskedKeyword, PrfInput};
 use rand::thread_rng;
+use shared::tokenize_text;
+use simplepir::SimplePIRClient;
 
 use super::types::{
-    BatchOprfQuery, BatchOprfResponse, OprfQuery, OprfResponse, RecordIdxList, SecureKeywordAnswer,
-    SecureKeywordBatchOprfState, SecureKeywordClientContext, SecureKeywordHint,
-    SecureKeywordOprfState, SecureKeywordQuery, SecureKeywordQueryState,
+    OprfQuery, OprfResponse, RecordIdxList, SecureKeywordAnswer, SecureKeywordClientContext,
+    SecureKeywordHint, SecureKeywordOprfState, SecureKeywordQuery, SecureKeywordQueryState,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -12,66 +13,49 @@ pub struct SecureKeywordClient;
 
 impl SecureKeywordClient {
     pub fn start_oprf(
-        keyword: &str,
+        keywords: &[String],
         context: &SecureKeywordClientContext,
     ) -> Option<(SecureKeywordOprfState, OprfQuery)> {
-        let norm_keyword = crate::plain::normalize_keyword(keyword)?;
+        let normalized: Vec<String> = keywords
+            .iter()
+            .map(|keyword| tokenize_text(keyword).into_iter().next())
+            .collect::<Option<_>>()?;
+        let m = context.oprf_params.m;
+        let inputs: Vec<PrfInput> = normalized
+            .iter()
+            .map(|keyword| {
+                let slot = context.oprf_input_hash.slot(keyword);
+                PrfInput {
+                    x1: slot / m,
+                    x2: slot % m,
+                }
+            })
+            .collect();
         let mut rng = thread_rng();
         let (oprf_state, oprf_query) = oprf::OprfClient::init_oprf(
-            &norm_keyword,
-            context.keyword_record_cell_count(),
+            &inputs,
+            context.keyword_database.keyword_record_cell_count(),
+            &context.oprf_params,
             &mut rng,
-        )
-        .ok()?;
+        );
 
         Some((SecureKeywordOprfState { oprf_state }, oprf_query))
     }
 
-    pub fn start_batch_oprf(
-        keywords: &[String],
-        context: &SecureKeywordClientContext,
-    ) -> Option<(SecureKeywordBatchOprfState, BatchOprfQuery)> {
-        let normalized: Vec<String> = keywords
-            .iter()
-            .map(|keyword| crate::plain::normalize_keyword(keyword))
-            .collect::<Option<_>>()?;
-        let mut rng = thread_rng();
-        let params = oprf::default_public_params();
-        let (oprf_state, oprf_query) = oprf::OprfClient::init_batch_oprf(
-            &normalized,
-            context.keyword_record_cell_count(),
-            &params,
-            &mut rng,
-        )
-        .ok()?;
-
-        Some((SecureKeywordBatchOprfState { oprf_state }, oprf_query))
-    }
-
-    pub fn finish_query(
+    pub fn finish_oprf(
         state: SecureKeywordOprfState,
         context: &SecureKeywordClientContext,
         oprf_response: &OprfResponse,
-    ) -> Result<Option<(SecureKeywordQueryState, SecureKeywordQuery)>, OprfError> {
-        let token = oprf::OprfClient::recover(state.oprf_state, oprf_response)?;
-        Ok(query_from_token(token, context))
-    }
-
-    pub fn finish_batch_query(
-        state: SecureKeywordBatchOprfState,
-        context: &SecureKeywordClientContext,
-        oprf_response: &BatchOprfResponse,
-    ) -> Result<Vec<Option<(SecureKeywordQueryState, SecureKeywordQuery)>>, OprfError> {
-        let tokens = oprf::OprfClient::recover_batch(state.oprf_state, oprf_response)?;
-        Ok(tokens
+    ) -> Vec<Option<(SecureKeywordQueryState, SecureKeywordQuery)>> {
+        let tokens = oprf::OprfClient::recover(state.oprf_state, oprf_response);
+        tokens
             .into_iter()
-            .map(|token| query_from_token(token, context))
-            .collect())
+            .map(|token| maskedkeyword_query(token, &context.keyword_database))
+            .collect()
     }
 
     pub fn recover(
         state: &SecureKeywordQueryState,
-        _context: &SecureKeywordClientContext,
         hint: &SecureKeywordHint,
         answers: &SecureKeywordAnswer,
     ) -> RecordIdxList {
@@ -86,11 +70,19 @@ impl SecureKeywordClient {
     }
 }
 
-fn query_from_token(
+fn maskedkeyword_query(
     token: MaskedKeyword,
-    context: &SecureKeywordClientContext,
+    context: &shared::keyword::KeywordClientContext,
 ) -> Option<(SecureKeywordQueryState, SecureKeywordQuery)> {
-    let (keyword_state, whole_query) = crate::plain::query_context_key(&token.x_hat, context)?;
+    let slot = context.slot_for(&token.x_hat);
+    let keyword_record_cell_count = context.keyword_record_cell_count();
+    let keyword_record_start_cell = slot * keyword_record_cell_count;
+    let (keyword_state, whole_query) = SimplePIRClient::query_record(
+        keyword_record_start_cell,
+        keyword_record_cell_count,
+        context.square_n,
+    );
+
     Some((
         SecureKeywordQueryState {
             keyword_state,

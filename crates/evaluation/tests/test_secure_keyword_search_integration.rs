@@ -14,7 +14,10 @@ mod integration_tests {
         let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
             "host=localhost user=user password=password dbname=pir_db".to_string()
         });
-        let keyword = env::var("KEYWORD").unwrap_or_else(|_| "heavy".to_string());
+        let keywords = [env::var("KEYWORD").unwrap_or_else(|_| "heavy".to_string())];
+        let keyword = keywords
+            .first()
+            .expect("secure keyword query should contain at least one keyword");
 
         let mut client =
             postgres::Client::connect(&database_url, NoTls).expect("Failed to connect to Postgres");
@@ -40,35 +43,32 @@ mod integration_tests {
         let plain_client_context = plain_server.client_context();
 
         let (plain_state, plain_queries) =
-            PlainKeywordClient::query(&keyword, &plain_client_context)
+            PlainKeywordClient::query(keyword, &plain_client_context)
                 .expect("keyword should exist in the plaintext keyword index");
         let plain_answers = plain_server.answer(&plain_queries);
-        let plain_record_fetch_request = PlainKeywordClient::recover(
-            &plain_state,
-            &plain_client_context,
-            plain_server.pir.hint(),
-            &plain_answers,
-        );
+        let plain_record_fetch_request =
+            PlainKeywordClient::recover(&plain_state, plain_server.pir.hint(), &plain_answers);
 
         let mut secure_server = SecureKeywordServer::setup(&keyword_mapping);
         let secure_client_context = secure_server.client_context();
         let (secure_oprf_state, secure_oprf_query) =
-            SecureKeywordClient::start_oprf(&keyword, &secure_client_context)
+            SecureKeywordClient::start_oprf(&keywords, &secure_client_context)
                 .expect("keyword should normalize for secure keyword query");
         let secure_oprf_response = secure_server
             .answer_oprf(&secure_oprf_query)
             .expect("secure keyword OPRF should answer");
-        let (secure_state, secure_queries) = SecureKeywordClient::finish_query(
+        let (secure_state, secure_queries) = SecureKeywordClient::finish_oprf(
             secure_oprf_state,
             &secure_client_context,
             &secure_oprf_response,
         )
-        .expect("secure keyword OPRF should recover")
+        .into_iter()
+        .next()
+        .expect("secure keyword OPRF should return the first keyword result")
         .expect("keyword should exist in the secure keyword index");
         let secure_answers = secure_server.answer(&secure_queries);
         let secure_record_fetch_request = SecureKeywordClient::recover(
             &secure_state,
-            &secure_client_context,
             secure_server.setup.pir.hint(),
             &secure_answers,
         );
@@ -106,8 +106,8 @@ mod integration_tests {
             bucket_size,
             Band::SIZEOFRECORD,
             &config,
-        );
-        let batch_schedule = batch_schedule.expect("batch scheduling should succeed");
+        )
+        .expect("batch scheduling should succeed");
         let answers = batch_server.answer(&query_results);
         let hint_cs = batch_server.hints();
         let recovered_rows = BatchSimplePIRClient::recover(

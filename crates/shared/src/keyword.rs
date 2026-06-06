@@ -19,14 +19,6 @@ impl PerfectHash {
     pub fn slot(&self, keyword: &str) -> usize {
         self.mphf.hash(&keyword.to_owned()) as usize
     }
-
-    pub fn len(&self) -> usize {
-        self.table_size
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.table_size == 0
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -35,8 +27,6 @@ pub struct KeywordClientContext {
     pub square_n: usize,
     pub record_size: usize,
 }
-
-pub type SecureKeywordClientContext = KeywordClientContext;
 
 impl KeywordClientContext {
     pub fn slot_for(&self, keyword: &str) -> usize {
@@ -112,11 +102,11 @@ pub fn build_perfect_hash(keywords: &[String]) -> PerfectHash {
     if unique_keywords.is_empty() {
         return PerfectHash {
             table_size: 0,
-            mphf: Mphf::new(1.7, &unique_keywords),
+            mphf: Mphf::new(2.0, &unique_keywords),
         };
     }
 
-    let mphf = Mphf::new(1.7, &unique_keywords);
+    let mphf = Mphf::new(2.0, &unique_keywords);
     PerfectHash {
         table_size: unique_keywords.len(),
         mphf,

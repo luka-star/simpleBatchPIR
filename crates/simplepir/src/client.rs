@@ -43,11 +43,14 @@ impl BatchSimplePIRClient {
         bucket_size: usize,
         record_cell_count: usize,
         config: &PBCConfig,
-    ) -> (
-        Vec<SimplePIRClientState>,
-        BatchSimplePIRQuery,
-        Result<BatchSimplePIRSchedule, String>,
-    ) {
+    ) -> Result<
+        (
+            Vec<SimplePIRClientState>,
+            BatchSimplePIRQuery,
+            BatchSimplePIRSchedule,
+        ),
+        String,
+    > {
         batch_query(
             indices,
             position_map,
@@ -144,13 +147,15 @@ fn batch_query(
     bucket_size: usize,
     record_cell_count: usize,
     config: &PBCConfig,
-) -> (
-    Vec<SimplePIRClientState>,
-    BatchSimplePIRQuery,
-    Result<BatchSimplePIRSchedule, String>,
-) {
-    let schedule =
-        shared::pbc::gen_schedule(config, indices).expect("Failed to generate a schedule");
+) -> Result<
+    (
+        Vec<SimplePIRClientState>,
+        BatchSimplePIRQuery,
+        BatchSimplePIRSchedule,
+    ),
+    String,
+> {
+    let schedule = shared::pbc::gen_schedule(config, indices)?;
     let mut rng = rand::thread_rng();
 
     let bucket_to_index: BatchSimplePIRSchedule = schedule
@@ -175,7 +180,7 @@ fn batch_query(
         queries.push(q_vecs);
     }
 
-    (states, queries, Ok(schedule))
+    Ok((states, queries, schedule))
 }
 
 fn block_positions(start_cell: usize, cell_count: usize, square_n: usize) -> Vec<(usize, usize)> {
@@ -239,4 +244,22 @@ fn recover_record(
     }
 
     recovered.to_vec()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn batch_query_returns_schedule_errors() {
+        let config = PBCConfig::fixed_seeds(1, 1);
+        let position_map = BatchSimplePIRBucketOracle::new();
+
+        let result = BatchSimplePIRClient::query(&[0, 1], &position_map, 1, 1, &config);
+
+        assert_eq!(
+            result.unwrap_err(),
+            "Cannot schedule more indices than buckets"
+        );
+    }
 }

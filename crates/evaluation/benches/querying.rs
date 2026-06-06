@@ -17,7 +17,7 @@ criterion_group! {
         query_dbsize,
 }
 
-const DB_SIZE: [usize; 10] = [1, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384];
+const DB_SIZE: [usize; 8] = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
 
 fn query_dbsize(c: &mut Criterion) {
     let mut group = c.benchmark_group("querying");

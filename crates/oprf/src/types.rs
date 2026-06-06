@@ -1,4 +1,4 @@
-use crate::ot::{TreeOtError, TreeOtReceiver, TreeOtReceiverMessage, TreeOtSenderMessage};
+use crate::ot::{TreeOtReceiver, TreeOtReceiverMessage, TreeOtSenderMessage};
 use crate::PrfInput;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -6,7 +6,7 @@ pub struct OprfPublicParams {
     pub max_queries: usize,
     pub layers: usize,
     pub m: usize,
-    pub permutation_seeds: Vec<[u8; 32]>,
+    pub permutation_master_seed: [u8; 32],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,31 +15,21 @@ pub struct MaskedKeyword {
     pub p_hat: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OprfError {
-    TreeOt(TreeOtError),
-    MismatchedKeyRows,
-    QueryShapeMismatch,
-    WrongRecoveredKeyLength,
     AlreadyAnswered,
     TooManyQueries,
 }
 
-impl From<TreeOtError> for OprfError {
-    fn from(error: TreeOtError) -> Self {
-        Self::TreeOt(error)
-    }
-}
-
 #[derive(Debug, Clone)]
-pub struct OprfClientState {
+pub(crate) struct OprfKeywordClientState {
     pub(crate) payload_len: usize,
     pub(crate) layers: Vec<OprfLayerClientState>,
 }
 
 #[derive(Debug, Clone)]
-pub struct BatchOprfClientState {
-    pub(crate) keywords: Vec<OprfClientState>,
+pub struct OprfClientState {
+    pub(crate) keywords: Vec<OprfKeywordClientState>,
 }
 
 #[derive(Debug, Clone)]
@@ -56,13 +46,13 @@ pub struct OprfLayerQuery {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OprfQuery {
+pub(crate) struct OprfKeywordQuery {
     pub layers: Vec<OprfLayerQuery>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BatchOprfQuery {
-    pub queries: Vec<OprfQuery>,
+pub struct OprfQuery {
+    pub(crate) queries: Vec<OprfKeywordQuery>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,11 +62,11 @@ pub struct OprfLayerResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OprfResponse {
+pub(crate) struct OprfKeywordResponse {
     pub layers: Vec<OprfLayerResponse>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BatchOprfResponse {
-    pub responses: Vec<OprfResponse>,
+pub struct OprfResponse {
+    pub(crate) responses: Vec<OprfKeywordResponse>,
 }

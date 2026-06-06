@@ -1,8 +1,18 @@
-pub use oprf::{BatchOprfQuery, BatchOprfResponse, OprfQuery, OprfResponse};
-pub use shared::keyword::{RecordIdxList, SecureKeywordClientContext, SecureKeywordDatabase};
+use oprf::OprfPublicParams;
+pub use oprf::{OprfQuery, OprfResponse};
+use shared::keyword::KeywordClientContext;
+use shared::keyword::PerfectHash;
+pub use shared::keyword::{RecordIdxList, SecureKeywordDatabase};
 use simplepir::types::{
     SimplePIRClientState, SimplePIRHint, SimplePIRRecordAnswer, SimplePIRRecordQuery,
 };
+
+#[derive(Debug, Clone)]
+pub struct SecureKeywordClientContext {
+    pub keyword_database: KeywordClientContext,
+    pub oprf_input_hash: PerfectHash,
+    pub oprf_params: OprfPublicParams,
+}
 
 #[derive(Debug, Clone)]
 pub struct SecureKeywordQueryState {
@@ -13,11 +23,6 @@ pub struct SecureKeywordQueryState {
 #[derive(Debug, Clone)]
 pub struct SecureKeywordOprfState {
     pub(crate) oprf_state: oprf::OprfClientState,
-}
-
-#[derive(Debug, Clone)]
-pub struct SecureKeywordBatchOprfState {
-    pub(crate) oprf_state: oprf::BatchOprfClientState,
 }
 
 pub type SecureKeywordQuery = SimplePIRRecordQuery;

@@ -40,7 +40,6 @@ mod integration_tests {
         let answers = keyword_server.answer(&queries);
         let record_fetch_request = PlainKeywordClient::recover(
             &state,
-            &keyword_client_context,
             keyword_server.pir.hint(),
             &answers,
         );
@@ -48,7 +47,7 @@ mod integration_tests {
         println!("keyword: {}", keyword);
         println!(
             "normalized slot count: {}",
-            keyword_server.keyword_database.perfect_hash.len()
+            keyword_server.keyword_database.perfect_hash.table_size
         );
         println!("recovered record indices: {:?}", record_fetch_request);
 
@@ -70,8 +69,8 @@ mod integration_tests {
             bucket_size,
             Band::SIZEOFRECORD,
             &config,
-        );
-        let batch_schedule = batch_schedule.expect("batch scheduling should succeed");
+        )
+        .expect("batch scheduling should succeed");
         let answers = batch_server.answer(&query_results);
         let hint_cs = batch_server.hints();
         let recovered_rows = BatchSimplePIRClient::recover(

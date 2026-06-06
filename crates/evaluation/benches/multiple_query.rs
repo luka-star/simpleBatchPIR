@@ -16,8 +16,8 @@ criterion_group! {
         multiple_query,
 }
 
-const NUMBER_OF_BANDS: [usize; 6] = [1024, 2048, 4096, 8192, 16384, 32768];
-const NUMBER_OF_ITEMS: [usize; 7] = [2, 4, 8, 16, 20, 32, 64];
+const NUMBER_OF_BANDS: [usize; 8] = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
+const NUMBER_OF_ITEMS: [usize; 8] = [2, 4, 8, 16, 20, 32, 64, 128];
 
 fn multiple_query(c: &mut Criterion) {
     for nr_bands in NUMBER_OF_BANDS {
@@ -83,9 +83,8 @@ fn multiple_query(c: &mut Criterion) {
                             black_box(bucket_size),
                             black_box(Band::SIZEOFRECORD),
                             black_box(&config),
-                        );
-                        let schedule =
-                            schedule.expect("batch querying should succeed in benchmark");
+                        )
+                        .expect("batch querying should succeed in benchmark");
                         let answers = batch_server.answer(black_box(&queries));
                         BatchSimplePIRClient::recover(
                             black_box(&states),

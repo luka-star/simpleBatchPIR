@@ -16,7 +16,6 @@ impl PlainKeywordClient {
 
     pub fn recover(
         state: &SimplePIRClientState,
-        _context: &KeywordClientContext,
         hint: &SimplePIRHint,
         answers: &SimplePIRRecordAnswer,
     ) -> RecordIdxList {
@@ -24,44 +23,23 @@ impl PlainKeywordClient {
     }
 }
 
-pub(crate) fn normalize_keyword(keyword: &str) -> Option<String> {
-    tokenize_text(keyword).into_iter().next()
-}
-
 fn keyword_query(
     keyword: &str,
     context: &KeywordClientContext,
 ) -> Option<(SimplePIRClientState, SimplePIRRecordQuery)> {
-    let normalized = normalize_keyword(keyword)?;
-    query_context_key(&normalized, context)
-}
-
-pub(crate) fn query_context_key(
-    key: &str,
-    context: &KeywordClientContext,
-) -> Option<(SimplePIRClientState, SimplePIRRecordQuery)> {
-    let slot = context.slot_for(key);
-    Some(query_slot(
-        slot,
-        context.keyword_record_cell_count(),
-        context.square_n,
-    ))
-}
-
-fn query_slot(
-    slot: usize,
-    keyword_record_cell_count: usize,
-    square_n: usize,
-) -> (SimplePIRClientState, SimplePIRRecordQuery) {
+    let normalized = tokenize_text(keyword).into_iter().next()?;
+    let slot = context.slot_for(&normalized);
+    let keyword_record_cell_count = context.keyword_record_cell_count();
     let keyword_record_start_cell = slot * keyword_record_cell_count;
     let (state, whole_query) = SimplePIRClient::query_record(
         keyword_record_start_cell,
         keyword_record_cell_count,
-        square_n,
+        context.square_n,
     );
 
-    (state, whole_query)
+    Some((state, whole_query))
 }
+
 
 fn recover_keyword_record(
     state: &SimplePIRClientState,
