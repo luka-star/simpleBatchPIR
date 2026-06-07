@@ -6,7 +6,7 @@ use shared::models::Band;
 use simplepir::{SimplePIRClient, SimplePIRServer};
 use std::env;
 use std::path::Path;
-use support::{assert_requested_band_count, make_bands, random_idx};
+use support::{assert_requested_band_count, make_bands, random_idx, table_for_size};
 
 criterion_group! {
     name = benches;
@@ -18,6 +18,8 @@ criterion_group! {
 }
 
 const DB_SIZE: [usize; 8] = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
+
+
 
 fn query_dbsize(c: &mut Criterion) {
     let mut group = c.benchmark_group("querying");
@@ -59,21 +61,21 @@ fn query_dbsize(c: &mut Criterion) {
 
     for nr_bands in DB_SIZE {
         let target_idx = random_idx(nr_bands);
-        let sql = format!(
-            "SELECT band_index, band_name, country, genre, status
-             FROM data_10
-             WHERE band_index = {target_idx}
-             ORDER BY band_index ASC
-             LIMIT 1"
-        );
+        let table = table_for_size(nr_bands);
 
         group.bench_with_input(
             BenchmarkId::new("sql", nr_bands),
             &nr_bands,
             |b, &_nr_bands| {
                 b.iter(|| {
+                    let sql = format!(
+                    "SELECT band_index, band_name, country, genre, status
+                    FROM {table}
+                    WHERE band_index = {target_idx}
+                    ORDER BY band_index ASC
+                    LIMIT 1"
+                    );
                     let rows = client.query(&sql, &[]).expect("Query failed");
-
                     black_box(rows);
                 })
             },

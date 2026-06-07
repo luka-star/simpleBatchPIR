@@ -5,10 +5,17 @@ use rand::{seq::index::sample, Rng};
 use shared::models::Band;
 use std::env;
 
-fn table_for_size(nr_bands: usize) -> String {
-    match nr_bands {
-        1 => "data_0".to_string(),
-        _ => "data_all".to_string(),
+pub fn table_for_size(db_size: usize) -> &'static str {
+    match db_size {
+        1024 => "data_10",
+        2048 => "data_11",
+        4096 => "data_12",
+        8192 => "data_13",
+        16384 => "data_14",
+        32768 => "data_15",
+        65536 => "data_16",
+        131072 => "data_17",
+        _ => panic!("unsupported SQL benchmark database size: {db_size}"),
     }
 }
 
