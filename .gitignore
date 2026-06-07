@@ -3,3 +3,5 @@ target/
 scripts/
 Cargo.lock
 benchmark-results/
+server-benchmark-plots/
+server-benchmark-summary.csv

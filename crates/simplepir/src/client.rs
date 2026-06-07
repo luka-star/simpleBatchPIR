@@ -155,6 +155,8 @@ fn batch_query(
     ),
     String,
 > {
+    let bucket_root = (bucket_size as f64).sqrt().ceil() as usize;
+    let a_matrix: Array2<shared::rings::Zq> = compute_a(bucket_root);
     let schedule = shared::pbc::gen_schedule(config, indices)?;
     let mut rng = rand::thread_rng();
 
@@ -166,7 +168,6 @@ fn batch_query(
     let mut states = Vec::with_capacity(config.buckets);
     let mut queries = Vec::with_capacity(config.buckets);
     for bucket in 0..config.buckets {
-        let bucket_root = (bucket_size as f64).sqrt().ceil() as usize;
         let bucket_capacity = (bucket_size / record_cell_count).max(1);
         let record_index = if let Some(index) = bucket_to_index.get(&bucket) {
             oracle_index(bucket, *index, position_map).expect("Missing oracle index")
@@ -175,7 +176,8 @@ fn batch_query(
         };
         let block_start_cell = record_index * record_cell_count;
 
-        let (state, q_vecs) = query_record(block_start_cell, record_cell_count, bucket_root);
+        let (state, q_vecs) =
+            query_record_with_matrix(block_start_cell, record_cell_count, bucket_root, &a_matrix);
         states.push(state);
         queries.push(q_vecs);
     }
@@ -198,6 +200,15 @@ fn query_record(
     square_n: usize,
 ) -> (SimplePIRClientState, SimplePIRRecordQuery) {
     let a_matrix: Array2<shared::rings::Zq> = compute_a(square_n);
+    query_record_with_matrix(start_cell, cell_count, square_n, &a_matrix)
+}
+
+fn query_record_with_matrix(
+    start_cell: usize,
+    cell_count: usize,
+    square_n: usize,
+    a_matrix: &Array2<shared::rings::Zq>,
+) -> (SimplePIRClientState, SimplePIRRecordQuery) {
     let mut queried_columns = Vec::with_capacity(cell_count.min(square_n));
     for (_, col_idx) in block_positions(start_cell, cell_count, square_n) {
         if !queried_columns.contains(&col_idx) {
@@ -209,7 +220,7 @@ fn query_record(
     let mut secrets = Vec::with_capacity(queried_columns.len());
 
     for &i_col in &queried_columns {
-        let (query, secret) = single_query(i_col, &a_matrix, square_n);
+        let (query, secret) = single_query(i_col, a_matrix, square_n);
         whole_query.push(query);
         secrets.push(secret);
     }

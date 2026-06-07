@@ -17,7 +17,7 @@ criterion_group! {
 }
 
 const NUMBER_OF_BANDS: [usize; 8] = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
-const NUMBER_OF_ITEMS: [usize; 8] = [2, 4, 8, 16, 20, 32, 64, 128];
+const NUMBER_OF_ITEMS: [usize; 6] = [2, 4, 8, 16, 32, 64];
 
 fn multiple_query(c: &mut Criterion) {
     for nr_bands in NUMBER_OF_BANDS {
