@@ -11,6 +11,7 @@ postgres = "0.19"
 criterion = { version = "0.5", features = ["csv_output"] }
 ndarray = "0.16"
 rand = "0.8"
+rayon = "1.10"
 
 [[bench]]
 name = "querying"
@@ -30,6 +31,16 @@ harness = false
 [[bench]]
 name = "multiple_query"
 path = "benches/multiple_query.rs"
+harness = false
+
+[[bench]]
+name = "parallel_multiple_query"
+path = "benches/parallel_multiple_query.rs"
+harness = false
+
+[[bench]]
+name = "keyword_search"
+path = "benches/keyword_search.rs"
 harness = false
 
 [[bench]]
