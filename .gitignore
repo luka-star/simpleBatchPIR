@@ -4,4 +4,6 @@ scripts/
 Cargo.lock
 benchmark-results/
 server-benchmark-plots/
+server-benchmark-plots-new/
 server-benchmark-summary.csv
+server-benchmark-summary-new.csv

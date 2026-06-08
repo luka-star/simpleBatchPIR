@@ -26,11 +26,11 @@ criterion_group! {
         online_query,
 }
 
-const NUMBER_OF_BANDS: usize = 65536;
+const NUMBER_OF_BANDS: usize = 131072;
 const QUERY_BATCH_SIZE: usize = 64;
-const HASH_FUNCTION_COUNTS: [usize; 3] = [2, 3, 4];
-const BUCKET_COUNTS: [usize; 8] = [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]; 
-const FAILURE_RATE_TRIALS: usize = 10_000_000;
+const HASH_FUNCTION_COUNTS: [usize; 4] = [2, 3, 4, 5];
+const BUCKET_COUNTS: [usize; 10] = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]; 
+const FAILURE_RATE_TRIALS: usize = 1_000_000_000;
 struct FailureRateRecord {
     n: usize,
     b: usize,
