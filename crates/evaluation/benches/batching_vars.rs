@@ -28,7 +28,7 @@ criterion_group! {
 
 const NUMBER_OF_BANDS: usize = 131072;
 const QUERY_BATCH_SIZE: usize = 64;
-const HASH_FUNCTION_COUNTS: [usize; 4] = [2, 3, 4, 5];
+const HASH_FUNCTION_COUNTS: [usize; 3] = [2, 3, 4];
 const BUCKET_COUNTS: [usize; 10] = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]; 
 const FAILURE_RATE_TRIALS: usize = 10_000_000;
 struct FailureRateRecord {
