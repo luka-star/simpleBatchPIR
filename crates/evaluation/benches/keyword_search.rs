@@ -25,7 +25,7 @@ criterion_group! {
         keyword_search,
 }
 
-const LOOKUP_DB_SIZE: [usize; 4] = [512,1024, 2048, 4096];
+const LOOKUP_DB_SIZE: [usize; 5] = [512,1024, 2048, 4096, 8192];
 const METADATA_DB_SIZE: [usize; 7] = [512,1024, 2048, 4096, 8192, 16384, 32768];
 const OPRF_M: usize = 256;
 

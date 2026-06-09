@@ -9,8 +9,6 @@ use simplepir::types::{
     SimplePIRClientState,
 };
 use simplepir::{BatchSimplePIRClient, BatchSimplePIRServer};
-use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 use support::{assert_requested_band_count, make_bands, random_index_list};
 
@@ -22,26 +20,15 @@ criterion_group! {
         .measurement_time(std::time::Duration::from_secs(8))
         .sample_size(10);
     targets =
-        export_failure_rate_data,
         online_query,
 }
 
 const NUMBER_OF_BANDS: usize = 131072;
 const QUERY_BATCH_SIZE: usize = 64;
 const HASH_FUNCTION_COUNTS: [usize; 3] = [2, 3, 4];
-const BUCKET_COUNTS: [usize; 10] = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]; 
-const FAILURE_RATE_TRIALS: usize = 10_000_000;
-struct FailureRateRecord {
-    n: usize,
-    b: usize,
-    b_ratio: String,
-    w: usize,
-    k: usize,
-    trials: usize,
-    successes: usize,
-    failure_rate: f64,
-}
-
+const BUCKET_COUNTS: [usize; 10] = [
+    256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072,
+];
 struct ScheduledSubquery {
     indices: Vec<usize>,
     states: Vec<SimplePIRClientState>,
@@ -53,89 +40,6 @@ fn load_bands(nr_bands: usize) -> Vec<shared::models::Band> {
     let bands = make_bands(nr_bands).expect("Failed to fetch bands");
     assert_requested_band_count(nr_bands, bands.len());
     bands
-}
-
-fn compute_failure_rate(
-    upper: usize,
-    bucket_count: usize,
-    config: &pbc::PBCConfig,
-    nr_indices: usize,
-    trials: usize,
-) -> FailureRateRecord {
-    let mut successes = 0usize;
-
-    for _ in 0..trials {
-        let index_list = random_index_list(nr_indices, upper);
-        if pbc::gen_schedule(config, &index_list).is_ok() {
-            successes += 1;
-        }
-    }
-
-    FailureRateRecord {
-        n: upper,
-        b: bucket_count,
-        b_ratio: format!("{:.5}", bucket_count as f64 / upper as f64),
-        w: config.w(),
-        k: nr_indices,
-        trials,
-        successes,
-        failure_rate: 1.0 - (successes as f64 / trials as f64),
-    }
-}
-
-fn write_failure_rate_csv(output_path: &Path, records: &[FailureRateRecord]) {
-    output_path.parent().unwrap().mkdir_if_missing();
-    let mut file = File::create(output_path).expect("Failed to create failure rate CSV");
-    writeln!(file, "n,b,b_ratio,w,k,trials,successes,failure_rate")
-        .expect("Failed to write CSV header");
-
-    for record in records {
-        writeln!(
-            file,
-            "{},{},{},{},{},{},{},{}",
-            record.n,
-            record.b,
-            record.b_ratio,
-            record.w,
-            record.k,
-            record.trials,
-            record.successes,
-            record.failure_rate
-        )
-        .expect("Failed to write failure rate row");
-    }
-}
-
-trait MkdirIfMissing {
-    fn mkdir_if_missing(&self);
-}
-
-impl MkdirIfMissing for Path {
-    fn mkdir_if_missing(&self) {
-        std::fs::create_dir_all(self).expect("Failed to create benchmark-results directory");
-    }
-}
-
-fn export_failure_rate_data(_c: &mut Criterion) {
-    let mut records = Vec::new();
-
-    for w in HASH_FUNCTION_COUNTS {
-        for bucket_count in BUCKET_COUNTS {
-            let config = pbc::PBCConfig::fixed_seeds(bucket_count, w);
-            records.push(compute_failure_rate(
-                NUMBER_OF_BANDS,
-                bucket_count,
-                &config,
-                QUERY_BATCH_SIZE,
-                FAILURE_RATE_TRIALS,
-            ));
-        }
-    }
-
-    write_failure_rate_csv(
-        Path::new("benchmark-results/failure_rate_summary.csv"),
-        &records,
-    );
 }
 
 fn query_with_split_fallback(
@@ -185,7 +89,6 @@ fn query_with_split_fallback(
     }
 }
 
-
 fn online_query(c: &mut Criterion) {
     let bands = load_bands(NUMBER_OF_BANDS);
     let db = Band::bands_to_matrix(&bands);
@@ -200,7 +103,7 @@ fn online_query(c: &mut Criterion) {
             let bucket_size = batch_server.bucket_size();
             let hint_cs = batch_server.hints();
             let index_list = random_index_list(QUERY_BATCH_SIZE, bands.len());
-            
+
             group.bench_with_input(
                 BenchmarkId::new(format!("w_{w}"), bucket_count),
                 &bucket_count,

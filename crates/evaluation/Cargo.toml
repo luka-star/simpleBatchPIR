@@ -49,6 +49,11 @@ path = "benches/batching_vars.rs"
 harness = false
 
 [[bench]]
+name = "batching_failure_rate"
+path = "benches/batching_failure_rate.rs"
+harness = false
+
+[[bench]]
 name = "bucket_padding"
 path = "benches/bucket_padding.rs"
 harness = false
