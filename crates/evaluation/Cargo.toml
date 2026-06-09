@@ -44,6 +44,11 @@ path = "benches/keyword_search.rs"
 harness = false
 
 [[bench]]
+name = "keyword_oprf"
+path = "benches/keyword_oprf.rs"
+harness = false
+
+[[bench]]
 name = "batching_vars"
 path = "benches/batching_vars.rs"
 harness = false
