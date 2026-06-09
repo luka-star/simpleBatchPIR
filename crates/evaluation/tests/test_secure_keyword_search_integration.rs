@@ -57,7 +57,7 @@ mod integration_tests {
         let secure_oprf_response = secure_server
             .answer_oprf(&secure_oprf_query)
             .expect("secure keyword OPRF should answer");
-        let (secure_state, secure_queries) = SecureKeywordClient::finish_oprf(
+        let (secure_state, secure_queries) = SecureKeywordClient::query(
             secure_oprf_state,
             &secure_client_context,
             &secure_oprf_response,

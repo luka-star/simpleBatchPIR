@@ -39,9 +39,7 @@ struct KeywordFixture {
 struct KeywordIndexMetadata {
     bands: usize,
     distinct_keywords: usize,
-    max_index_list_len: usize,
     keyword_record_size: usize,
-    keyword_record_cell_count: usize,
     keyword_matrix_dim: usize,
 }
 
@@ -85,9 +83,7 @@ fn keyword_index_metadata(nr_bands: usize) -> KeywordIndexMetadata {
     KeywordIndexMetadata {
         bands: nr_bands,
         distinct_keywords,
-        max_index_list_len,
         keyword_record_size,
-        keyword_record_cell_count,
         keyword_matrix_dim,
     }
 }
@@ -109,12 +105,10 @@ fn export_keyword_index_metadata(_c: &mut Criterion) {
         let metadata = keyword_index_metadata(nr_bands);
         writeln!(
             file,
-            "{},{},{},{},{},{}",
+            "{},{},{},{}",
             metadata.bands,
             metadata.distinct_keywords,
-            metadata.max_index_list_len,
             metadata.keyword_record_size,
-            metadata.keyword_record_cell_count,
             metadata.keyword_matrix_dim
         )
         .expect("Failed to write keyword metadata CSV row");
@@ -218,7 +212,7 @@ fn keyword_search(c: &mut Criterion) {
                         .secure_server
                         .answer_oprf_session(black_box(&oprf_query))
                         .expect("secure keyword OPRF should answer");
-                    let (state, query) = SecureKeywordClient::finish_oprf(
+                    let (state, query) = SecureKeywordClient::query(
                         black_box(oprf_state),
                         black_box(&secure_context),
                         black_box(&oprf_response),

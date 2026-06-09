@@ -106,21 +106,19 @@ fn keyword_oprf(c: &mut Criterion) {
                         .secure_server
                         .answer_oprf_session(black_box(&oprf_query))
                         .expect("secure keyword OPRF should answer");
-                    let result = SecureKeywordClient::finish_oprf(
+                    let token = SecureKeywordClient::finish_oprf(
                         black_box(oprf_state),
-                        black_box(&secure_context),
                         black_box(&oprf_response),
                     )
                     .into_iter()
                     .next()
-                    .expect("secure keyword OPRF should return one result")
-                    .expect("sampled keyword must exist in secure keyword index");
+                    .expect("secure keyword OPRF should return one result");
 
                     assert_eq!(
-                        result.0.p_hat.len(),
+                        token.p_hat.len(),
                         secure_context.keyword_database.keyword_record_cell_count()
                     );
-                    black_box(result);
+                    black_box(token);
                 })
             },
         );

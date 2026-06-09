@@ -42,16 +42,22 @@ impl SecureKeywordClient {
         Some((SecureKeywordOprfState { oprf_state }, oprf_query))
     }
 
-    pub fn finish_oprf(
+    pub fn query(
         state: SecureKeywordOprfState,
         context: &SecureKeywordClientContext,
         oprf_response: &OprfResponse,
     ) -> Vec<Option<(SecureKeywordQueryState, SecureKeywordQuery)>> {
-        let tokens = oprf::OprfClient::recover(state.oprf_state, oprf_response);
-        tokens
+        Self::finish_oprf(state, oprf_response)
             .into_iter()
             .map(|token| maskedkeyword_query(token, &context.keyword_database))
             .collect()
+    }
+
+    pub fn finish_oprf(
+        state: SecureKeywordOprfState,
+        oprf_response: &OprfResponse,
+    ) -> Vec<MaskedKeyword> {
+        oprf::OprfClient::recover(state.oprf_state, oprf_response)
     }
 
     pub fn recover(
