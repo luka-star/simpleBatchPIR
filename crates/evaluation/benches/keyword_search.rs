@@ -8,6 +8,8 @@ use rand::seq::SliceRandom;
 use shared::models::construct_keyword_mapping;
 use shared::RecordIdxList;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use support::{assert_requested_band_count, make_bands};
 
@@ -19,10 +21,12 @@ criterion_group! {
         .measurement_time(std::time::Duration::from_secs(8))
         .sample_size(10);
     targets =
+        export_keyword_index_metadata,
         keyword_search,
 }
 
-const DB_SIZE: [usize; 6] = [1024, 2048, 4096, 8192, 16384, 32768];
+const LOOKUP_DB_SIZE: [usize; 4] = [512, 1024, 2048, 4096];
+const METADATA_DB_SIZE: [usize; 7] = [512, 1024, 2048, 4096, 8192, 16384, 32768];
 const OPRF_M: usize = 256;
 
 struct KeywordFixture {
@@ -32,20 +36,30 @@ struct KeywordFixture {
     secure_server: SecureKeywordServer,
 }
 
-fn keyword_fixture(nr_bands: usize) -> KeywordFixture {
+struct KeywordIndexMetadata {
+    bands: usize,
+    distinct_keywords: usize,
+    max_index_list_len: usize,
+    keyword_record_size: usize,
+    keyword_record_cell_count: usize,
+    keyword_matrix_dim: usize,
+}
+
+fn keyword_mapping(nr_bands: usize) -> HashMap<String, RecordIdxList> {
     let bands = make_bands(nr_bands).expect("Failed to fetch bands");
     assert_requested_band_count(nr_bands, bands.len());
+    construct_keyword_mapping(&bands)
+}
 
-    let mapping = construct_keyword_mapping(&bands);
-    let keywords = shared::keyword::collect_keywords(&mapping);
+fn assert_keyword_mapping_supported(mapping: &HashMap<String, RecordIdxList>) {
     assert!(
-        !keywords.is_empty(),
+        !mapping.is_empty(),
         "keyword benchmark requires at least one keyword"
     );
     assert!(
-        keywords.len() <= OPRF_M * OPRF_M,
+        mapping.len() <= OPRF_M * OPRF_M,
         "keyword set has {} keywords, exceeding the OPRF input domain {}^2",
-        keywords.len(),
+        mapping.len(),
         OPRF_M
     );
     assert!(
@@ -55,6 +69,62 @@ fn keyword_fixture(nr_bands: usize) -> KeywordFixture {
             .all(|idx| *idx <= u16::MAX as usize),
         "keyword records encode indices as u16, but at least one record index exceeds u16::MAX"
     );
+}
+
+fn keyword_index_metadata(nr_bands: usize) -> KeywordIndexMetadata {
+    let mapping = keyword_mapping(nr_bands);
+    assert_keyword_mapping_supported(&mapping);
+
+    let distinct_keywords = mapping.len();
+    let max_index_list_len = mapping.values().map(|idxs| idxs.len()).max().unwrap_or(0);
+    let keyword_record_size = max_index_list_len.saturating_add(1);
+    let keyword_record_cell_count = keyword_record_size * 2;
+    let matrix_cells = distinct_keywords * keyword_record_cell_count;
+    let keyword_matrix_dim = (matrix_cells as f64).sqrt().ceil() as usize;
+
+    KeywordIndexMetadata {
+        bands: nr_bands,
+        distinct_keywords,
+        max_index_list_len,
+        keyword_record_size,
+        keyword_record_cell_count,
+        keyword_matrix_dim,
+    }
+}
+
+fn export_keyword_index_metadata(_c: &mut Criterion) {
+    let output_path = Path::new("benchmark-results/keyword_index_metadata.csv");
+    output_path
+        .parent()
+        .expect("metadata output must have a parent")
+        .mkdir_if_missing();
+    let mut file = File::create(output_path).expect("Failed to create keyword metadata CSV");
+    writeln!(
+        file,
+        "bands,distinct_keywords,max_index_list_len,keyword_record_size,keyword_record_cell_count,keyword_matrix_dim"
+    )
+    .expect("Failed to write keyword metadata CSV header");
+
+    for nr_bands in METADATA_DB_SIZE {
+        let metadata = keyword_index_metadata(nr_bands);
+        writeln!(
+            file,
+            "{},{},{},{},{},{}",
+            metadata.bands,
+            metadata.distinct_keywords,
+            metadata.max_index_list_len,
+            metadata.keyword_record_size,
+            metadata.keyword_record_cell_count,
+            metadata.keyword_matrix_dim
+        )
+        .expect("Failed to write keyword metadata CSV row");
+    }
+}
+
+fn keyword_fixture(nr_bands: usize) -> KeywordFixture {
+    let mapping = keyword_mapping(nr_bands);
+    assert_keyword_mapping_supported(&mapping);
+    let keywords = shared::keyword::collect_keywords(&mapping);
 
     let plain_server = PlainKeywordServer::setup(&mapping);
     let secure_server = SecureKeywordServer::setup(&mapping);
@@ -77,10 +147,20 @@ fn random_keyword(keywords: &[String]) -> &str {
         .expect("keyword list must be non-empty")
 }
 
+trait MkdirIfMissing {
+    fn mkdir_if_missing(&self);
+}
+
+impl MkdirIfMissing for Path {
+    fn mkdir_if_missing(&self) {
+        std::fs::create_dir_all(self).expect("Failed to create benchmark-results directory");
+    }
+}
+
 fn keyword_search(c: &mut Criterion) {
     let mut plain_group = c.benchmark_group("keyword_search_plain");
 
-    for nr_bands in DB_SIZE {
+    for nr_bands in LOOKUP_DB_SIZE {
         let fixture = keyword_fixture(nr_bands);
         let plain_context = fixture.plain_server.client_context();
 
@@ -114,7 +194,7 @@ fn keyword_search(c: &mut Criterion) {
 
     let mut secure_group = c.benchmark_group("keyword_search_secure");
 
-    for nr_bands in DB_SIZE {
+    for nr_bands in LOOKUP_DB_SIZE {
         let mut fixture = keyword_fixture(nr_bands);
         let secure_context = fixture.secure_server.client_context();
 
