@@ -195,7 +195,7 @@ fn keyword_search(c: &mut Criterion) {
     let mut secure_group = c.benchmark_group("keyword_search_secure");
 
     for nr_bands in LOOKUP_DB_SIZE {
-        let mut fixture = keyword_fixture(nr_bands);
+        let fixture = keyword_fixture(nr_bands);
         let secure_context = fixture.secure_server.client_context();
 
         secure_group.bench_with_input(
@@ -216,7 +216,7 @@ fn keyword_search(c: &mut Criterion) {
                     .expect("sampled keyword must normalize for secure keyword query");
                     let oprf_response = fixture
                         .secure_server
-                        .answer_oprf(black_box(&oprf_query))
+                        .answer_oprf_session(black_box(&oprf_query))
                         .expect("secure keyword OPRF should answer");
                     let (state, query) = SecureKeywordClient::finish_oprf(
                         black_box(oprf_state),

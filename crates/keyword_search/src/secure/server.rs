@@ -60,6 +60,12 @@ impl SecureKeywordServer {
         self.setup.oprf.answer(query, &mut rng)
     }
 
+    pub fn answer_oprf_session(&self, query: &OprfQuery) -> Result<OprfResponse, OprfError> {
+        let mut rng = thread_rng();
+        let mut oprf = self.setup.oprf.clone();
+        oprf.answer(query, &mut rng)
+    }
+
     pub fn answer(&self, query: &SecureKeywordQuery) -> SecureKeywordAnswer {
         self.setup.pir.answer(query)
     }
