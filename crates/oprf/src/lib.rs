@@ -18,7 +18,7 @@ pub(crate) use types::{
 
 pub(crate) use server::GKey;
 
-pub const FEISTEL_ROUNDS: usize = 8;
+pub const PERMUTATION_ROUNDS: usize = 8;
 pub const DEFAULT_M: usize = 256;
 const DEFAULT_X_HAT_LEN: usize = 12;
 pub const DEFAULT_T: usize = 8;
@@ -64,7 +64,7 @@ pub(crate) fn permute_input(
     let seed = derive_permutation_seed(&params.permutation_master_seed, layer);
 
     let index = pack_input(input);
-    let permuted = feistel_permute(index, &seed);
+    let permuted = permute(index, &seed);
 
     unpack_input(permuted)
 }
@@ -145,12 +145,12 @@ pub(crate) fn derive_permutation_seed(
     *hasher.finalize().as_bytes()
 }
 
-pub(crate) fn feistel_permute(index: u16, seed: &[u8; 32]) -> u16 {
+pub(crate) fn permute(index: u16, seed: &[u8; 32]) -> u16 {
     let mut left = (index >> 8) as u8;
     let mut right = (index & 0xff) as u8;
 
-    for round in 0..FEISTEL_ROUNDS {
-        let f = feistel_round_function(seed, round, right);
+    for round in 0..PERMUTATION_ROUNDS {
+        let f = round_function(seed, round, right);
 
         let new_left = right;
         let new_right = left ^ f;
@@ -162,7 +162,7 @@ pub(crate) fn feistel_permute(index: u16, seed: &[u8; 32]) -> u16 {
     ((left as u16) << 8) | right as u16
 }
 
-fn feistel_round_function(seed: &[u8; 32], round: usize, right: u8) -> u8 {
+fn round_function(seed: &[u8; 32], round: usize, right: u8) -> u8 {
     let mut hasher = Hasher::new_keyed(seed);
 
     hasher.update(b"non-adaptive-oprf/feistel-round/v1");

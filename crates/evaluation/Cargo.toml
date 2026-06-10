@@ -26,11 +26,6 @@ path = "benches/offline_setup.rs"
 harness = false
 
 [[bench]]
-name = "auxiliary"
-path = "benches/auxiliary.rs"
-harness = false
-
-[[bench]]
 name = "multiple_query"
 path = "benches/multiple_query.rs"
 harness = false

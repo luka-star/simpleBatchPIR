@@ -36,10 +36,6 @@ impl KeywordClientContext {
     pub fn keyword_record_cell_count(&self) -> usize {
         self.record_size * 2
     }
-
-    pub fn keyword_record_start_cell_for(&self, keyword: &str) -> usize {
-        self.slot_for(keyword) * self.keyword_record_cell_count()
-    }
 }
 
 #[derive(Debug, Clone)]
