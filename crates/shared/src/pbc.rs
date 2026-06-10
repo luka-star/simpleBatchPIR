@@ -1,9 +1,10 @@
 use ahash::RandomState;
 use rand::Rng;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::hash::{BuildHasher, Hash, Hasher};
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct PBCConfig {
     pub buckets: usize,
     pub seeds: Vec<u64>,

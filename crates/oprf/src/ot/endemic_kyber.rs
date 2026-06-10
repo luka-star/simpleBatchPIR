@@ -2,6 +2,8 @@ use super::OtKey;
 use pqc_kyber::*;
 use rand::CryptoRng;
 use rand::RngCore;
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KyberEndemicOtReceiverMessage {
@@ -13,6 +15,24 @@ pub struct KyberEndemicOtReceiverMessage {
 pub struct KyberEndemicOtSenderMessage {
     pub ct_0: [u8; KYBER_CIPHERTEXTBYTES],
     pub ct_1: [u8; KYBER_CIPHERTEXTBYTES],
+}
+
+impl Serialize for KyberEndemicOtReceiverMessage {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("KyberEndemicOtReceiverMessage", 2)?;
+        state.serialize_field("r_0", &self.r_0.as_slice())?;
+        state.serialize_field("r_1", &self.r_1.as_slice())?;
+        state.end()
+    }
+}
+
+impl Serialize for KyberEndemicOtSenderMessage {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("KyberEndemicOtSenderMessage", 2)?;
+        state.serialize_field("ct_0", &self.ct_0.as_slice())?;
+        state.serialize_field("ct_1", &self.ct_1.as_slice())?;
+        state.end()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

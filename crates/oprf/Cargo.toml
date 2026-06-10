@@ -8,3 +8,4 @@ blake3 = "1"
 pqc_kyber = { version = "0.7.1", features = ["std"] }
 rand = { version = "0.8", features = ["small_rng"] }
 hex ="0.4"
+serde = { version = "1.0", features = ["derive"] }

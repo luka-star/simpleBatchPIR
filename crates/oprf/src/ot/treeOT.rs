@@ -5,6 +5,7 @@ use super::endemic_kyber::{
 use super::OtKey;
 use rand::CryptoRng;
 use rand::RngCore;
+use serde::Serialize;
 
 const DOMAIN: &[u8] = b"ot-extension";
 
@@ -15,13 +16,13 @@ pub struct TreeOtReceiver {
     base_receivers: Vec<KyberEndemicOtReceiver>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TreeOtReceiverMessage {
     pub n: usize,
     pub base_messages: Vec<KyberEndemicOtReceiverMessage>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TreeOtSenderMessage {
     pub n: usize,
     pub message_len: usize,
