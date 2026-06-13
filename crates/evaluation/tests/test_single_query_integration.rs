@@ -8,7 +8,7 @@ mod integration_tests {
     #[test]
     fn test_full_pir_pipeline() -> Result<(), Box<dyn std::error::Error>> {
         let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-            "host=localhost user=user password=password dbname=pir_db".to_string()
+            "host=127.0.0.1 user=user password=password dbname=pir_db".to_string()
         });
 
         let mut client =

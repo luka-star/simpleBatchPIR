@@ -21,7 +21,7 @@ pub fn table_for_size(db_size: usize) -> &'static str {
 
 pub fn make_bands(nr_bands: usize) -> Result<Vec<Band>, Error> {
     let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "host=localhost user=user password=password dbname=pir_db".to_string());
+        .unwrap_or_else(|_| "host=127.0.0.1 user=user password=password dbname=pir_db".to_string());
 
     let mut client = postgres::Client::connect(&database_url, NoTls)?;
 

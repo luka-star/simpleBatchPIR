@@ -10,7 +10,7 @@ mod integration_tests {
     fn test_keyword_search_pipeline_on_real_1024_row_dataset(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-            "host=localhost user=user password=password dbname=pir_db".to_string()
+            "host=127.0.0.1 user=user password=password dbname=pir_db".to_string()
         });
         let keyword = env::var("KEYWORD").unwrap_or_else(|_| "heavy".to_string());
 
