@@ -1,6 +1,6 @@
 use crate::ot::{TreeOtReceiver, TreeOtSenderMessage};
 use crate::{
-    eval_layer, masked_keyword_from_raw, permute_input, xor_into, GKey, MaskedKeyword,
+    eval_layer, masked_keyword_from_raw, permute_input, xor_into, RKEY, MaskedKeyword,
     OprfClientState, OprfKeywordClientState, OprfKeywordQuery, OprfKeywordResponse,
     OprfLayerClientState, OprfLayerQuery, OprfPublicParams, OprfQuery, OprfResponse, PrfInput,
     DEFAULT_X_HAT_LEN,
@@ -66,9 +66,9 @@ fn init_keyword_oprf(
     for layer_idx in 0..params.layers {
         let input = permute_input(base_input, params, layer_idx);
         let (left_receiver, left) =
-            TreeOtReceiver::choose_leaf(input.x1, params.m, std::mem::size_of::<GKey>(), rng);
+            TreeOtReceiver::choose_leaf(input.x1, params.m, std::mem::size_of::<RKEY>(), rng);
         let (right_receiver, right) =
-            TreeOtReceiver::choose_leaf(input.x2, params.m, std::mem::size_of::<GKey>(), rng);
+            TreeOtReceiver::choose_leaf(input.x2, params.m, std::mem::size_of::<RKEY>(), rng);
 
         layers.push(OprfLayerClientState {
             input,
@@ -89,7 +89,7 @@ fn init_keyword_oprf(
     )
 }
 
-fn recover_key(receiver: TreeOtReceiver, sender_msg: &TreeOtSenderMessage) -> GKey {
+fn recover_key(receiver: TreeOtReceiver, sender_msg: &TreeOtSenderMessage) -> RKEY {
     let output = receiver.recover_leaf(sender_msg);
     output
         .message

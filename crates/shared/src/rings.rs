@@ -1,4 +1,4 @@
-use ndarray::{Array2};
+use ndarray::Array2;
 use std::num::Wrapping;
 
 pub type Zq = Wrapping<u32>;

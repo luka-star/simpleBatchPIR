@@ -1,23 +1,23 @@
 use crate::ot::TreeOtSender;
 use crate::{
-    default_public_params, eval_layer, masked_keyword_from_raw, permute_input, xor_into,
+    eval_layer, masked_keyword_from_raw, permute_input, init_params, xor_into,
     MaskedKeyword, OprfError, OprfKeywordResponse, OprfLayerResponse, OprfPublicParams, OprfQuery,
     OprfResponse, PrfInput, DEFAULT_X_HAT_LEN,
 };
 use rand::{CryptoRng, RngCore};
 
-pub(crate) type GKey = [u8; 32];
+pub(crate) type RKEY = [u8; 32];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct OprfLayerKey {
-    pub row1: Vec<GKey>,
-    pub row2: Vec<GKey>,
+pub(crate) struct OprfLayeRKEY {
+    pub row1: Vec<RKEY>,
+    pub row2: Vec<RKEY>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OprfKey {
     pub params: OprfPublicParams,
-    pub layers: Vec<OprfLayerKey>,
+    pub layers: Vec<OprfLayeRKEY>,
 }
 
 #[derive(Debug, Clone)]
@@ -28,7 +28,7 @@ pub struct OprfServer {
 
 impl OprfServer {
     pub fn setup(rng: &mut (impl RngCore + CryptoRng)) -> Self {
-        Self::new(keygen_with_params(default_public_params(), rng))
+        Self::new(keygen_with_params(init_params(rng), rng))
     }
 
     pub(crate) fn new(key: OprfKey) -> Self {
@@ -93,7 +93,7 @@ impl OprfServer {
     }
 }
 
-fn row_messages(row: &[GKey]) -> Vec<Vec<u8>> {
+fn row_messages(row: &[RKEY]) -> Vec<Vec<u8>> {
     row.iter().map(|key| key.to_vec()).collect()
 }
 
@@ -103,7 +103,7 @@ pub(crate) fn keygen_with_params(
 ) -> OprfKey {
     OprfKey {
         layers: (0..params.layers)
-            .map(|_| OprfLayerKey {
+            .map(|_| OprfLayeRKEY {
                 row1: sample_row(params.m, rng),
                 row2: sample_row(params.m, rng),
             })
@@ -112,7 +112,7 @@ pub(crate) fn keygen_with_params(
     }
 }
 
-fn sample_row(m: usize, rng: &mut (impl RngCore + CryptoRng)) -> Vec<GKey> {
+fn sample_row(m: usize, rng: &mut (impl RngCore + CryptoRng)) -> Vec<RKEY> {
     (0..m)
         .map(|_| {
             let mut key = [0u8; 32];
@@ -127,6 +127,18 @@ mod tests {
     use super::*;
     use crate::OprfKeywordQuery;
     use rand::thread_rng;
+
+    #[test]
+    fn setup_samples_fresh_permutation_master_seed() {
+        let mut rng = thread_rng();
+        let first = OprfServer::setup(&mut rng);
+        let second = OprfServer::setup(&mut rng);
+
+        assert_ne!(
+            first.public_params().permutation_master_seed,
+            second.public_params().permutation_master_seed
+        );
+    }
 
     #[test]
     fn answer_rejects_more_than_max_queries() {

@@ -14,7 +14,15 @@ WITH (FORMAT csv, HEADER true);
 
 DROP TABLE IF EXISTS data_0;
 
-CREATE TABLE data_0 AS
+CREATE TABLE data_0 (
+    band_index  INT PRIMARY KEY,
+    band_name   TEXT,
+    country     TEXT,
+    genre       TEXT,
+    status      TEXT
+);
+
+INSERT INTO data_0
 SELECT
     band_index,
     band_name,
@@ -34,7 +42,18 @@ BEGIN
         EXECUTE format('DROP TABLE IF EXISTS data_%s;', i);
 
         EXECUTE format(
-            'CREATE TABLE data_%s AS
+            'CREATE TABLE data_%s (
+                band_index  INT PRIMARY KEY,
+                band_name   TEXT,
+                country     TEXT,
+                genre       TEXT,
+                status      TEXT
+             );',
+            i
+        );
+
+        EXECUTE format(
+            'INSERT INTO data_%s
              SELECT
                 band_index,
                 band_name,

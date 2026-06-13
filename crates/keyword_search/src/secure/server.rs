@@ -1,5 +1,5 @@
 use oprf::{OprfError, OprfQuery, OprfResponse, OprfServer, PrfInput};
-use rand::thread_rng;
+use rand::rngs::OsRng;
 use shared::keyword::{
     build_perfect_hash, collect_keywords, encode_keyword_record,
     pack_keyword_records_into_square_matrix, pack_prebuilt_keyword_records, KeywordRecord,
@@ -24,7 +24,7 @@ pub struct SecureKeywordServer {
 
 impl SecureKeywordServer {
     pub fn setup(mapping: &HashMap<String, RecordIdxList>) -> Self {
-        let mut rng = thread_rng();
+        let mut rng = OsRng;
         let oprf = OprfServer::setup(&mut rng);
         let keywords = collect_keywords(mapping);
         let oprf_input_hash = build_perfect_hash(&keywords);
@@ -56,12 +56,12 @@ impl SecureKeywordServer {
     }
 
     pub fn answer_oprf(&mut self, query: &OprfQuery) -> Result<OprfResponse, OprfError> {
-        let mut rng = thread_rng();
+        let mut rng = OsRng;
         self.setup.oprf.answer(query, &mut rng)
     }
 
     pub fn answer_oprf_session(&self, query: &OprfQuery) -> Result<OprfResponse, OprfError> {
-        let mut rng = thread_rng();
+        let mut rng = OsRng;
         let mut oprf = self.setup.oprf.clone();
         oprf.answer(query, &mut rng)
     }

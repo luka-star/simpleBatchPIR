@@ -19,8 +19,6 @@ criterion_group! {
 
 const DB_SIZE: [usize; 8] = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
 
-
-
 fn query_dbsize(c: &mut Criterion) {
     let mut group = c.benchmark_group("querying");
 
@@ -69,7 +67,7 @@ fn query_dbsize(c: &mut Criterion) {
             |b, &_nr_bands| {
                 b.iter(|| {
                     let sql = format!(
-                    "SELECT band_index, band_name, country, genre, status
+                        "SELECT band_index, band_name, country, genre, status
                     FROM {table}
                     WHERE band_index = {target_idx}
                     ORDER BY band_index ASC

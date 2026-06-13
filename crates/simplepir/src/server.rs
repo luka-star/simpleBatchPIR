@@ -43,25 +43,23 @@ impl SimplePIRServer {
 pub struct BatchSimplePIRServer {
     pub hints: BatchSimplePIRHint,
     pub position_map: BatchSimplePIRBucketOracle,
-    pub buckets: Vec<SimplePIRDatabase>,
-    lifted_buckets: Vec<Array2<Zq>>,
+    pub lifted_buckets: Vec<Array2<Zq>>,
 }
 
 impl BatchSimplePIRServer {
     pub fn setup(db: &SimplePIRDatabase, record_cell_count: usize, config: &PBCConfig) -> Self {
-        let (hints, position_map, buckets, lifted_buckets) =
+        let (hints, position_map, lifted_buckets) =
             setup_batching(db, record_cell_count, config);
 
         Self {
             hints,
             position_map,
-            buckets,
             lifted_buckets,
         }
     }
 
     pub fn bucket_size(&self) -> usize {
-        self.buckets.first().map(|bucket| bucket.len()).unwrap_or(0)
+        self.lifted_buckets.first().map(|bucket| bucket.len()).unwrap_or(0)
     }
 
     pub fn hints(&self) -> Vec<SimplePIRHint> {
@@ -128,7 +126,6 @@ fn setup_batching(
 ) -> (
     BatchSimplePIRHint,
     BatchSimplePIRBucketOracle,
-    Vec<SimplePIRDatabase>,
     Vec<Array2<Zq>>,
 ) {
     let records = database_records(db, record_size);
@@ -143,7 +140,7 @@ fn setup_batching(
         }
     }
 
-    (hints, position_map, padded_buckets, lifted_buckets)
+    (hints, position_map, lifted_buckets)
 }
 
 fn database_records(db: &SimplePIRDatabase, record_cell_count: usize) -> Vec<SimplePIRRecord> {

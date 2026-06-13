@@ -33,15 +33,12 @@ const DB_SIZES: [usize; 5] = [512, 1024, 2048, 4096, 8192];
 const BATCH_QUERY_SIZE: usize = 64;
 const BATCH_BUCKET_COUNT: usize = 1500;
 const BATCH_HASH_COUNT: usize = 3;
-const ONE_GBPS_BYTES_PER_SECOND: f64 = 1_000_000_000.0 / 8.0;
-const HUNDRED_MBPS_BYTES_PER_SECOND: f64 = 100_000_000.0 / 8.0;
 
 struct SetupCostRecord {
     protocol: &'static str,
     records: usize,
     server_storage_bytes: usize,
     client_storage_bytes: usize,
-    notes: &'static str,
 }
 
 struct CommunicationCostRecord {
@@ -121,9 +118,9 @@ fn position_map_bytes(entries: usize) -> usize {
 
 fn batch_server_storage(server: &BatchSimplePIRServer) -> usize {
     let bucket_bytes: usize = server
-        .buckets
+        .lifted_buckets
         .iter()
-        .map(|bucket| zp_matrix_bytes(bucket) + lifted_zq_bytes_for_zp_matrix(bucket))
+        .map(|bucket| zq_matrix_bytes(bucket))
         .sum();
     let hint_bytes: usize = server.hints.iter().map(hint_bytes).sum();
     bucket_bytes + hint_bytes + position_map_bytes(server.position_map.len())
@@ -182,9 +179,7 @@ fn secure_keyword_client_storage(server: &SecureKeywordServer) -> usize {
 }
 
 fn simple_communication(server: &SimplePIRServer) -> CommunicationCostRecord {
-    let block_start_cell = 0;
-    let (_state, query) =
-        SimplePIRClient::query_record(block_start_cell, Band::SIZEOFRECORD, server.square_n());
+    let (_state, query) = SimplePIRClient::query_record(0, Band::SIZEOFRECORD, server.square_n());
     let answer = server.answer(&query);
 
     CommunicationCostRecord {
@@ -277,26 +272,21 @@ fn write_setup_costs(output_path: &Path, records: &[SetupCostRecord]) {
     let mut file = File::create(output_path).expect("Failed to create storage CSV");
     writeln!(
         file,
-        "protocol,records,server_storage_bytes,client_storage_bytes,notes"
+        "protocol,records,server_storage_bytes,client_storage_bytes"
     )
     .expect("Failed to write storage CSV header");
 
     for record in records {
         writeln!(
             file,
-            "{},{},{},{},{}",
+            "{},{},{},{}",
             record.protocol,
             record.records,
             record.server_storage_bytes,
-            record.client_storage_bytes,
-            record.notes
+            record.client_storage_bytes
         )
         .expect("Failed to write storage CSV row");
     }
-}
-
-fn transfer_ms(bytes: usize, bytes_per_second: f64) -> f64 {
-    (bytes as f64 / bytes_per_second) * 1_000.0
 }
 
 fn write_communication_costs(output_path: &Path, records: &[CommunicationCostRecord]) {
@@ -304,23 +294,19 @@ fn write_communication_costs(output_path: &Path, records: &[CommunicationCostRec
     let mut file = File::create(output_path).expect("Failed to create communication CSV");
     writeln!(
         file,
-        "protocol,records,query_items,client_upload_bytes,server_download_bytes,upload_100mbps_ms,download_100mbps_ms,upload_1gbps_ms,download_1gbps_ms"
+        "protocol,records,query_items,client_upload_bytes,server_download_bytes"
     )
     .expect("Failed to write communication CSV header");
 
     for record in records {
         writeln!(
             file,
-            "{},{},{},{},{},{:.6},{:.6},{:.6},{:.6}",
+            "{},{},{},{},{}",
             record.protocol,
             record.records,
             record.query_items,
             record.client_upload_bytes,
-            record.server_download_bytes,
-            transfer_ms(record.client_upload_bytes, HUNDRED_MBPS_BYTES_PER_SECOND),
-            transfer_ms(record.server_download_bytes, HUNDRED_MBPS_BYTES_PER_SECOND),
-            transfer_ms(record.client_upload_bytes, ONE_GBPS_BYTES_PER_SECOND),
-            transfer_ms(record.server_download_bytes, ONE_GBPS_BYTES_PER_SECOND)
+            record.server_download_bytes
         )
         .expect("Failed to write communication CSV row");
     }
@@ -404,7 +390,6 @@ fn export_offline_costs(_c: &mut Criterion) {
             records: nr_bands,
             server_storage_bytes: simple_server_storage(&simple_server),
             client_storage_bytes: simple_client_storage(&simple_server),
-            notes: "server storage includes db,hint,lifted_db",
         });
         communication_records.push(simple_communication(&simple_server));
 
@@ -417,8 +402,6 @@ fn export_offline_costs(_c: &mut Criterion) {
             records: nr_bands,
             server_storage_bytes: batch_server_storage(&batch_server),
             client_storage_bytes: batch_client_storage(&batch_server, &batch_config),
-            notes:
-                "w=3,b=1500,server storage includes bucket dbs,hints,lifted_buckets,position_map",
         });
         communication_records.push(batch_communication(&batch_server, &batch_config, nr_bands));
 
@@ -428,7 +411,6 @@ fn export_offline_costs(_c: &mut Criterion) {
             records: nr_bands,
             server_storage_bytes: plain_keyword_server_storage(&plain_server),
             client_storage_bytes: plain_keyword_client_storage(&plain_server),
-            notes: "storage includes keyword matrix,MPHF estimate,SimplePIR state",
         });
         communication_records.push(plain_keyword_communication(
             &plain_server,
@@ -442,7 +424,6 @@ fn export_offline_costs(_c: &mut Criterion) {
             records: nr_bands,
             server_storage_bytes: secure_keyword_server_storage(&secure_server),
             client_storage_bytes: secure_keyword_client_storage(&secure_server),
-            notes: "storage includes keyword matrix,MPHF estimate,SimplePIR state,OPRF key/public params",
         });
         communication_records.push(secure_keyword_communication(
             &secure_server,

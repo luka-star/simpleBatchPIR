@@ -133,14 +133,6 @@ mod integration_tests {
         );
 
         let target_bands_idx = [1, 42, 320];
-        assert_bucket_shapes(&batch_server.hints, &batch_server.buckets, b);
-        assert_oracle_entries(
-            &bands,
-            &target_bands_idx,
-            &new_config,
-            &batch_server.position_map,
-            &batch_server.buckets,
-        );
 
         let schedule = gen_schedule(&new_config, &target_bands_idx)
             .expect("test targets should admit a batching schedule");

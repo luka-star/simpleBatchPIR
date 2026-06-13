@@ -1,5 +1,6 @@
 use ndarray::{Array1, Array2};
 use rand::prelude::*;
+use rand::rngs::OsRng;
 use rand_chacha::ChaCha20Rng;
 use rand_distr::{Distribution, Normal};
 use shared::rings::Zp;
@@ -75,7 +76,7 @@ fn generate_secret_and_error(
     root_of_n: usize,
 ) -> (Array1<shared::rings::Zq>, Array1<Wrapping<i32>>) {
     let mut seed = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut seed);
+    OsRng.fill_bytes(&mut seed);
     let mut rng = ChaCha20Rng::from_seed(seed);
     let s = Array1::from_shape_fn(SEC_PARAM_N, |_| rng.gen::<shared::rings::Zq>());
     let sigma = 6.4;

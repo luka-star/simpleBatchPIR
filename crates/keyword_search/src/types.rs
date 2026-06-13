@@ -1,3 +1,1 @@
-pub use shared::keyword::{
-    KeywordClientContext, RecordIdx, RecordIdxList,
-};
+pub use shared::keyword::{KeywordClientContext, RecordIdx, RecordIdxList};

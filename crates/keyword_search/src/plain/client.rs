@@ -40,7 +40,6 @@ fn keyword_query(
     Some((state, whole_query))
 }
 
-
 fn recover_keyword_record(
     state: &SimplePIRClientState,
     hint: &SimplePIRHint,

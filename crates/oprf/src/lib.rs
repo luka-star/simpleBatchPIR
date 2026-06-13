@@ -1,4 +1,5 @@
 use blake3::Hasher;
+use rand::{CryptoRng, RngCore};
 
 pub mod client;
 mod ot;
@@ -16,7 +17,7 @@ pub(crate) use types::{
     OprfLayerQuery, OprfLayerResponse,
 };
 
-pub(crate) use server::GKey;
+pub(crate) use server::RKEY;
 
 pub const PERMUTATION_ROUNDS: usize = 8;
 pub const DEFAULT_M: usize = 256;
@@ -30,22 +31,16 @@ pub struct PrfInput {
     pub x2: usize,
 }
 
-impl Default for OprfPublicParams {
-    fn default() -> Self {
-        Self {
-            max_queries: DEFAULT_T,
-            layers: DEFAULT_ELL,
-            m: DEFAULT_M,
-            permutation_master_seed: *blake3::hash(
-                b"non-adaptive-oprf/default-public-permutation-master-seed/v1",
-            )
-            .as_bytes(),
-        }
-    }
-}
+pub fn init_params(rng: &mut (impl RngCore + CryptoRng)) -> OprfPublicParams {
+    let mut permutation_master_seed = [0u8; 32];
+    rng.fill_bytes(&mut permutation_master_seed);
 
-pub fn default_public_params() -> OprfPublicParams {
-    OprfPublicParams::default()
+    OprfPublicParams {
+        max_queries: DEFAULT_T,
+        layers: DEFAULT_ELL,
+        m: DEFAULT_M,
+        permutation_master_seed,
+    }
 }
 
 pub(crate) fn permute_input(
@@ -92,7 +87,7 @@ pub(crate) fn masked_keyword_from_raw(raw: Vec<u8>) -> MaskedKeyword {
     }
 }
 
-fn eval(left_key: &GKey, right_key: &GKey, input: PrfInput, out_len: usize) -> Vec<u8> {
+fn eval(left_key: &RKEY, right_key: &RKEY, input: PrfInput, out_len: usize) -> Vec<u8> {
     let left = eval_g(left_key, input, out_len);
     let right = eval_g(right_key, input, out_len);
 
@@ -100,15 +95,15 @@ fn eval(left_key: &GKey, right_key: &GKey, input: PrfInput, out_len: usize) -> V
 }
 
 pub(crate) fn eval_layer(
-    left_key: &GKey,
-    right_key: &GKey,
+    left_key: &RKEY,
+    right_key: &RKEY,
     input: PrfInput,
     out_len: usize,
 ) -> Vec<u8> {
     eval(left_key, right_key, input, out_len)
 }
 
-fn eval_g(key: &GKey, input: PrfInput, out_len: usize) -> Vec<u8> {
+fn eval_g(key: &RKEY, input: PrfInput, out_len: usize) -> Vec<u8> {
     assert!(input.x1 < 256);
     assert!(input.x2 < 256);
 

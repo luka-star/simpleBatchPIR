@@ -1,5 +1,5 @@
 use oprf::{MaskedKeyword, PrfInput};
-use rand::thread_rng;
+use rand::rngs::OsRng;
 use shared::tokenize_text;
 use simplepir::SimplePIRClient;
 
@@ -31,7 +31,7 @@ impl SecureKeywordClient {
                 }
             })
             .collect();
-        let mut rng = thread_rng();
+        let mut rng = OsRng;
         let (oprf_state, oprf_query) = oprf::OprfClient::init_oprf(
             &inputs,
             context.keyword_database.keyword_record_cell_count(),

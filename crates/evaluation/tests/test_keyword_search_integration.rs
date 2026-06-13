@@ -38,11 +38,8 @@ mod integration_tests {
         let (state, queries) = PlainKeywordClient::query(&keyword, &keyword_client_context)
             .expect("keyword should exist in the keyword index");
         let answers = keyword_server.answer(&queries);
-        let record_fetch_request = PlainKeywordClient::recover(
-            &state,
-            keyword_server.pir.hint(),
-            &answers,
-        );
+        let record_fetch_request =
+            PlainKeywordClient::recover(&state, keyword_server.pir.hint(), &answers);
 
         println!("keyword: {}", keyword);
         println!(

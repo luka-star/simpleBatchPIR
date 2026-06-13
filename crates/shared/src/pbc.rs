@@ -103,5 +103,5 @@ fn insert_cuckoo<T: Hash + Copy + Eq>(
         schedule.remove(&evicted);
         index = evicted;
     }
-    Err("Could not generate a cuckoo schedule".to_string())
+    Err("Could not generate a schedule".to_string())
 }
