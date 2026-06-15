@@ -7,11 +7,13 @@ edition = "2021"
 shared = { path = "../shared" }
 keyword_search = { path = "../keyword_search" }
 simplepir = { path = "../simplepir" }
-tokio = { version = "1", features = ["full"] }
-tokio-postgres = "0.7"
+postgres = "0.19"
 criterion = { version = "0.5", features = ["csv_output"] }
 ndarray = "0.16"
 rand = "0.8"
+rayon = "1.10"
+bincode = "1.3"
+serde = "1.0"
 
 [[bench]]
 name = "querying"
@@ -24,16 +26,41 @@ path = "benches/offline_setup.rs"
 harness = false
 
 [[bench]]
-name = "auxiliary"
-path = "benches/auxiliary.rs"
-harness = false
-
-[[bench]]
 name = "multiple_query"
 path = "benches/multiple_query.rs"
 harness = false
 
 [[bench]]
+name = "parallel_multiple_query"
+path = "benches/parallel_multiple_query.rs"
+harness = false
+
+[[bench]]
+name = "keyword_search"
+path = "benches/keyword_search.rs"
+harness = false
+
+[[bench]]
+name = "keyword_oprf"
+path = "benches/keyword_oprf.rs"
+harness = false
+
+[[bench]]
 name = "batching_vars"
 path = "benches/batching_vars.rs"
+harness = false
+
+[[bench]]
+name = "batching_failure_rate"
+path = "benches/batching_failure_rate.rs"
+harness = false
+
+[[bench]]
+name = "offline_costs"
+path = "benches/offline_costs.rs"
+harness = false
+
+[[bench]]
+name = "bucket_padding"
+path = "benches/bucket_padding.rs"
 harness = false

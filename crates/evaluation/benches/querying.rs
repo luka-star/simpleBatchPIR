@@ -1,13 +1,12 @@
 mod support;
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use postgres::NoTls;
 use shared::models::Band;
 use simplepir::{SimplePIRClient, SimplePIRServer};
 use std::env;
 use std::path::Path;
-use support::{assert_requested_band_count, make_bands, random_idx};
-use tokio::runtime::Runtime;
-use tokio_postgres::NoTls;
+use support::{assert_requested_band_count, make_bands, random_idx, table_for_size};
 
 criterion_group! {
     name = benches;
@@ -18,16 +17,13 @@ criterion_group! {
         query_dbsize,
 }
 
-const DB_SIZE: [usize; 10] = [1, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384];
+const DB_SIZE: [usize; 8] = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
 
 fn query_dbsize(c: &mut Criterion) {
     let mut group = c.benchmark_group("querying");
 
     for nr_bands in DB_SIZE {
-        let rt = Runtime::new().unwrap();
-        let bands = rt
-            .block_on(make_bands(nr_bands))
-            .expect("Failed to fetch bands");
+        let bands = make_bands(nr_bands).expect("Failed to fetch bands");
         assert_requested_band_count(nr_bands, bands.len());
         let pir_server = SimplePIRServer::setup(Band::bands_to_matrix(&bands));
         let actual_band_count = bands.len();
@@ -55,40 +51,30 @@ fn query_dbsize(c: &mut Criterion) {
         );
     }
 
-    let rt = Runtime::new().unwrap();
     let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "host=localhost user=user password=password dbname=pir_db".to_string());
+        .unwrap_or_else(|_| "host=127.0.0.1 user=user password=password dbname=pir_db".to_string());
 
-    let (client, connection) = rt
-        .block_on(tokio_postgres::connect(&database_url, NoTls))
-        .expect("Failed to connect to Postgres");
-
-    rt.spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("Database error: {}", e);
-        }
-    });
+    let mut client =
+        postgres::Client::connect(&database_url, NoTls).expect("Failed to connect to Postgres");
 
     for nr_bands in DB_SIZE {
         let target_idx = random_idx(nr_bands);
-        let sql = format!(
-            "SELECT band_index, band_name, fans, formed, style, origin, split
-             FROM data_10
-             WHERE band_index = {target_idx}
-             ORDER BY band_index ASC
-             LIMIT 1"
-        );
+        let table = table_for_size(nr_bands);
 
         group.bench_with_input(
             BenchmarkId::new("sql", nr_bands),
             &nr_bands,
             |b, &_nr_bands| {
                 b.iter(|| {
-                    rt.block_on(async {
-                        let rows = client.query(&sql, &[]).await.expect("Query failed");
-
-                        black_box(rows);
-                    })
+                    let sql = format!(
+                        "SELECT band_index, band_name, country, genre, status
+                    FROM {table}
+                    WHERE band_index = {target_idx}
+                    ORDER BY band_index ASC
+                    LIMIT 1"
+                    );
+                    let rows = client.query(&sql, &[]).expect("Query failed");
+                    black_box(rows);
                 })
             },
         );

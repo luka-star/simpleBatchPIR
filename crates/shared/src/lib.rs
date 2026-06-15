@@ -3,7 +3,7 @@ pub mod models;
 pub mod pbc;
 pub mod rings;
 use crate::rings::*;
-pub use keyword::{tokenize_text, RecordFetchRequest};
+pub use keyword::{tokenize_text, RecordIdxList};
 use ndarray::Array2;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;

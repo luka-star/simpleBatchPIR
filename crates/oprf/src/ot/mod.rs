@@ -5,5 +5,5 @@ mod tree_ot;
 pub(crate) type OtKey = [u8; 32];
 
 pub(crate) use tree_ot::{
-    TreeOtError, TreeOtReceiver, TreeOtReceiverMessage, TreeOtSender, TreeOtSenderMessage,
+    TreeOtReceiver, TreeOtReceiverMessage, TreeOtSender, TreeOtSenderMessage,
 };

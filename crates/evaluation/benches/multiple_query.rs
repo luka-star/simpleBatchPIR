@@ -6,7 +6,6 @@ use shared::pbc;
 use simplepir::{BatchSimplePIRClient, BatchSimplePIRServer, SimplePIRClient, SimplePIRServer};
 use std::path::Path;
 use support::{assert_requested_band_count, make_bands, random_index_list};
-use tokio::runtime::Runtime;
 
 criterion_group! {
     name = benches;
@@ -17,18 +16,15 @@ criterion_group! {
         multiple_query,
 }
 
-const NUMBER_OF_BANDS: [usize; 6] = [1024, 2048, 4096, 8192, 16384, 32768];
-const NUMBER_OF_ITEMS: [usize; 7] = [2, 4, 8, 16, 20, 32, 64];
+const NUMBER_OF_BANDS: [usize; 8] = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072];
+const NUMBER_OF_ITEMS: [usize; 6] = [2, 4, 8, 16, 32, 64];
 
 fn multiple_query(c: &mut Criterion) {
     for nr_bands in NUMBER_OF_BANDS {
         let mut group = c.benchmark_group(format!("multiple_query_simplepir/db_{nr_bands}"));
 
         for nr_indices in NUMBER_OF_ITEMS {
-            let rt = Runtime::new().unwrap();
-            let bands = rt
-                .block_on(make_bands(nr_bands))
-                .expect("Failed to fetch bands");
+            let bands = make_bands(nr_bands).expect("Failed to fetch bands");
             assert_requested_band_count(nr_bands, bands.len());
             let pir_server = SimplePIRServer::setup(Band::bands_to_matrix(&bands));
             let index_list = random_index_list(nr_indices, bands.len());
@@ -64,19 +60,16 @@ fn multiple_query(c: &mut Criterion) {
         let mut group = c.benchmark_group(format!("multiple_query_batchpir/db_{nr_bands}"));
 
         for nr_indices in NUMBER_OF_ITEMS {
-            let rt = Runtime::new().unwrap();
-            let bands = rt
-                .block_on(make_bands(nr_bands))
-                .expect("Failed to fetch bands");
+            let bands = make_bands(nr_bands).expect("Failed to fetch bands");
             assert_requested_band_count(nr_bands, bands.len());
-            let config = pbc::PBCConfig::new(1500, 3);
+            let config = pbc::PBCConfig::fixed_seeds(1500, 3);
             let batch_server = BatchSimplePIRServer::setup(
                 &Band::bands_to_matrix(&bands),
                 Band::SIZEOFRECORD,
                 &config,
             );
             let index_list = random_index_list(nr_indices, bands.len());
-            let bucket_element_counts = batch_server.bucket_element_counts();
+            let bucket_size = batch_server.bucket_size();
             let hint_cs = batch_server.hints();
 
             group.bench_with_input(
@@ -87,12 +80,11 @@ fn multiple_query(c: &mut Criterion) {
                         let (states, queries, schedule) = BatchSimplePIRClient::query(
                             black_box(&index_list),
                             black_box(&batch_server.position_map),
-                            black_box(&bucket_element_counts),
+                            black_box(bucket_size),
                             black_box(Band::SIZEOFRECORD),
                             black_box(&config),
-                        );
-                        let schedule =
-                            schedule.expect("batch querying should succeed in benchmark");
+                        )
+                        .expect("batch querying should succeed in benchmark");
                         let answers = batch_server.answer(black_box(&queries));
                         BatchSimplePIRClient::recover(
                             black_box(&states),

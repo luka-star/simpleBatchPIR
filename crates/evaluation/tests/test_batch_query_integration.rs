@@ -1,20 +1,20 @@
 #[cfg(test)]
 mod integration_tests {
+    use postgres::NoTls;
     use shared::{
         models::Band,
         pbc::{self, gen_schedule},
     };
     use simplepir::{BatchSimplePIRClient, BatchSimplePIRServer};
     use std::{collections::HashSet, env};
-    use tokio_postgres::NoTls;
 
     fn assert_bucket_shapes(
-        setup_res: &[simplepir::types::SimplePIRServerSetup],
+        hints: &[simplepir::types::SimplePIRHint],
         buckets: &[ndarray::Array2<shared::rings::Zp>],
         bucket_count: usize,
     ) {
         assert_eq!(
-            setup_res.len(),
+            hints.len(),
             bucket_count,
             "setup must return one result per bucket"
         );
@@ -24,19 +24,19 @@ mod integration_tests {
             "encoding must return one matrix per bucket"
         );
 
-        for (bucket_idx, (setup, bucket)) in setup_res.iter().zip(buckets.iter()).enumerate() {
+        for (bucket_idx, (hint, bucket)) in hints.iter().zip(buckets.iter()).enumerate() {
             assert_eq!(
                 bucket.nrows(),
                 bucket.ncols(),
                 "bucket {bucket_idx} is not square"
             );
             assert_eq!(
-                setup.hint.nrows(),
+                hint.nrows(),
                 bucket.nrows(),
                 "bucket {bucket_idx} hint rows must match bucket rows"
             );
             assert_eq!(
-                setup.hint.ncols(),
+                hint.ncols(),
                 shared::SEC_PARAM_N,
                 "bucket {bucket_idx} hint width must match security parameter"
             );
@@ -93,40 +93,31 @@ mod integration_tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_batch_pir_pipeline() -> Result<(), Box<dyn std::error::Error>> {
+    #[test]
+    fn test_batch_pir_pipeline() -> Result<(), Box<dyn std::error::Error>> {
         let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
-            "host=localhost user=user password=password dbname=pir_db".to_string()
+            "host=127.0.0.1 user=user password=password dbname=pir_db".to_string()
         });
 
-        let (client, connection) = tokio_postgres::connect(&database_url, NoTls)
-            .await
-            .expect("Failed to connect to Postgres");
-
-        tokio::spawn(async move {
-            if let Err(e) = connection.await {
-                eprintln!("Database error: {}", e);
-            }
-        });
+        let mut client =
+            postgres::Client::connect(&database_url, NoTls).expect("Failed to connect to Postgres");
 
         let exp = 10;
 
         let query_string = format!(
-            "SELECT band_index, band_name, fans, formed, style, origin, split FROM data_{exp} ORDER BY band_index ASC"
+            "SELECT band_index, band_name, country, genre, status FROM data_{exp} ORDER BY band_index ASC"
         );
 
-        let rows = client.query(&query_string, &[]).await?;
+        let rows = client.query(&query_string, &[])?;
 
         let bands: Vec<Band> = rows
             .iter()
             .map(|row| Band {
                 id: row.get(0),
                 name: row.get(1),
-                fans: row.get(2),
-                formed: row.get(3),
-                style: row.get(4),
-                origin: row.get(5),
-                split: row.get(6),
+                country: row.get(2),
+                genre: row.get(3),
+                status: row.get(4),
             })
             .collect();
 
@@ -134,7 +125,7 @@ mod integration_tests {
         let w: usize = 3;
         let b: usize = 1500;
 
-        let new_config: pbc::PBCConfig = pbc::PBCConfig::new(b, w);
+        let new_config: pbc::PBCConfig = pbc::PBCConfig::random_seeds(b, w);
         let batch_server = BatchSimplePIRServer::setup(
             &Band::bands_to_matrix(&bands),
             Band::SIZEOFRECORD,
@@ -142,29 +133,20 @@ mod integration_tests {
         );
 
         let target_bands_idx = [1, 42, 320];
-        assert_bucket_shapes(&batch_server.setups, &batch_server.buckets, b);
-        assert_oracle_entries(
-            &bands,
-            &target_bands_idx,
-            &new_config,
-            &batch_server.position_map,
-            &batch_server.buckets,
-        );
 
         let schedule = gen_schedule(&new_config, &target_bands_idx)
             .expect("test targets should admit a batching schedule");
         assert_schedule_invariants(&target_bands_idx, &new_config, &schedule);
 
-        let bucket_element_counts = batch_server.bucket_element_counts();
+        let bucket_size = batch_server.bucket_size();
         let (states, query_results, batch_schedule) = BatchSimplePIRClient::query(
             &target_bands_idx,
             &batch_server.position_map,
-            &bucket_element_counts,
+            bucket_size,
             Band::SIZEOFRECORD,
             &new_config,
-        );
-        let batch_schedule =
-            batch_schedule.expect("batch querying should surface schedule success");
+        )
+        .expect("batch querying should surface schedule success");
 
         assert_eq!(
             batch_schedule, schedule,

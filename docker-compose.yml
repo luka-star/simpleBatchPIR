@@ -13,12 +13,5 @@ services:
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
       - ./data:/data  
       - postgres_data:/var/lib/postgresql/data
-
-  server: 
-    build: .
-    environment:
-      DATABASE_URL: postgres://user:password@db:5432/pir_db
-    depends_on:
-      - db
 volumes:
   postgres_data:

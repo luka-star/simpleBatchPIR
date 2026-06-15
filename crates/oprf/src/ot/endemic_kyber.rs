@@ -2,19 +2,8 @@ use super::OtKey;
 use pqc_kyber::*;
 use rand::CryptoRng;
 use rand::RngCore;
-
-const HASH_TO_PK_DOMAIN: &[u8] = b"simpleBatchPIR/kyber-endemic-ot/H-to-pk-mask/v1";
-
-#[derive(Debug)]
-pub enum KyberEndemicOtError {
-    Kyber(KyberError),
-}
-
-impl From<KyberError> for KyberEndemicOtError {
-    fn from(error: KyberError) -> Self {
-        Self::Kyber(error)
-    }
-}
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KyberEndemicOtReceiverMessage {
@@ -26,6 +15,24 @@ pub struct KyberEndemicOtReceiverMessage {
 pub struct KyberEndemicOtSenderMessage {
     pub ct_0: [u8; KYBER_CIPHERTEXTBYTES],
     pub ct_1: [u8; KYBER_CIPHERTEXTBYTES],
+}
+
+impl Serialize for KyberEndemicOtReceiverMessage {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("KyberEndemicOtReceiverMessage", 2)?;
+        state.serialize_field("r_0", &self.r_0.as_slice())?;
+        state.serialize_field("r_1", &self.r_1.as_slice())?;
+        state.end()
+    }
+}
+
+impl Serialize for KyberEndemicOtSenderMessage {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("KyberEndemicOtSenderMessage", 2)?;
+        state.serialize_field("ct_0", &self.ct_0.as_slice())?;
+        state.serialize_field("ct_1", &self.ct_1.as_slice())?;
+        state.end()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,10 +59,10 @@ impl KyberEndemicOtReceiver {
     pub fn gen_strings(
         choice: bool,
         rng: &mut (impl RngCore + CryptoRng),
-    ) -> Result<(Self, KyberEndemicOtReceiverMessage), KyberEndemicOtError> {
+    ) -> (Self, KyberEndemicOtReceiverMessage) {
         let mut r_other = [0u8; KYBER_PUBLICKEYBYTES];
         rng.fill_bytes(&mut r_other);
-        let kyber_keys = keypair(rng)?;
+        let kyber_keys = keypair(rng).expect("Kyber key generation failed");
 
         let r_chosen = xor_public_keys(&kyber_keys.public, &hash_to_public_key_mask(&r_other));
         let (r_0, r_1) = if choice {
@@ -64,28 +71,28 @@ impl KyberEndemicOtReceiver {
             (r_chosen, r_other)
         };
 
-        Ok((
+        (
             Self {
                 choice,
                 sk: kyber_keys.secret,
             },
             KyberEndemicOtReceiverMessage { r_0, r_1 },
-        ))
+        )
     }
 
     pub fn recover_message(
         self,
         sender_msg: &KyberEndemicOtSenderMessage,
-    ) -> Result<KyberEndemicOtReceiverOutput, KyberEndemicOtError> {
+    ) -> KyberEndemicOtReceiverOutput {
         let ciphertext = if self.choice {
             &sender_msg.ct_1
         } else {
             &sender_msg.ct_0
         };
 
-        let o_b = decapsulate(ciphertext, &self.sk)?;
+        let o_b = decapsulate(ciphertext, &self.sk).expect("Kyber decapsulation failed");
 
-        Ok(KyberEndemicOtReceiverOutput { o_b })
+        KyberEndemicOtReceiverOutput { o_b }
     }
 }
 
@@ -93,8 +100,7 @@ impl KyberEndemicOtSender {
     pub fn respond(
         receiver_msg: &KyberEndemicOtReceiverMessage,
         rng: &mut (impl RngCore + CryptoRng),
-    ) -> Result<(KyberEndemicOtSenderMessage, KyberEndemicOtSenderOutput), KyberEndemicOtError>
-    {
+    ) -> (KyberEndemicOtSenderMessage, KyberEndemicOtSenderOutput) {
         let pk_0 = xor_public_keys(
             &receiver_msg.r_0,
             &hash_to_public_key_mask(&receiver_msg.r_1),
@@ -104,13 +110,13 @@ impl KyberEndemicOtSender {
             &hash_to_public_key_mask(&receiver_msg.r_0),
         );
 
-        let (ct_0, o_0) = encapsulate(&pk_0, rng)?;
-        let (ct_1, o_1) = encapsulate(&pk_1, rng)?;
+        let (ct_0, o_0) = encapsulate(&pk_0, rng).expect("Kyber encapsulation failed");
+        let (ct_1, o_1) = encapsulate(&pk_1, rng).expect("Kyber encapsulation failed");
 
-        Ok((
+        (
             KyberEndemicOtSenderMessage { ct_0, ct_1 },
             KyberEndemicOtSenderOutput { o_0, o_1 },
-        ))
+        )
     }
 }
 
@@ -118,11 +124,9 @@ fn hash_to_public_key_mask(input: &[u8; KYBER_PUBLICKEYBYTES]) -> [u8; KYBER_PUB
     let mut mask = [0u8; KYBER_PUBLICKEYBYTES];
 
     blake3::Hasher::new()
-        .update(HASH_TO_PK_DOMAIN)
         .update(input)
         .finalize_xof()
         .fill(&mut mask);
-
     mask
 }
 
@@ -147,11 +151,9 @@ mod tests {
     #[test]
     fn kyber_endemic_ot_choice_false_matches_sender_k0() {
         let mut rng = thread_rng();
-        let (receiver, receiver_msg) =
-            KyberEndemicOtReceiver::gen_strings(false, &mut rng).unwrap();
-        let (sender_msg, sender_output) =
-            KyberEndemicOtSender::respond(&receiver_msg, &mut rng).unwrap();
-        let receiver_output = receiver.recover_message(&sender_msg).unwrap();
+        let (receiver, receiver_msg) = KyberEndemicOtReceiver::gen_strings(false, &mut rng);
+        let (sender_msg, sender_output) = KyberEndemicOtSender::respond(&receiver_msg, &mut rng);
+        let receiver_output = receiver.recover_message(&sender_msg);
 
         assert_eq!(receiver_output.o_b, sender_output.o_0);
         assert_ne!(receiver_output.o_b, sender_output.o_1);
@@ -160,10 +162,9 @@ mod tests {
     #[test]
     fn kyber_endemic_ot_choice_true_matches_sender_k1() {
         let mut rng = thread_rng();
-        let (receiver, receiver_msg) = KyberEndemicOtReceiver::gen_strings(true, &mut rng).unwrap();
-        let (sender_msg, sender_output) =
-            KyberEndemicOtSender::respond(&receiver_msg, &mut rng).unwrap();
-        let receiver_output = receiver.recover_message(&sender_msg).unwrap();
+        let (receiver, receiver_msg) = KyberEndemicOtReceiver::gen_strings(true, &mut rng);
+        let (sender_msg, sender_output) = KyberEndemicOtSender::respond(&receiver_msg, &mut rng);
+        let receiver_output = receiver.recover_message(&sender_msg);
 
         assert_eq!(receiver_output.o_b, sender_output.o_1);
         assert_ne!(receiver_output.o_b, sender_output.o_0);
@@ -175,11 +176,10 @@ mod tests {
 
         for i in 0..32 {
             let choice = i % 2 == 1;
-            let (receiver, receiver_msg) =
-                KyberEndemicOtReceiver::gen_strings(choice, &mut rng).unwrap();
+            let (receiver, receiver_msg) = KyberEndemicOtReceiver::gen_strings(choice, &mut rng);
             let (sender_msg, sender_output) =
-                KyberEndemicOtSender::respond(&receiver_msg, &mut rng).unwrap();
-            let receiver_output = receiver.recover_message(&sender_msg).unwrap();
+                KyberEndemicOtSender::respond(&receiver_msg, &mut rng);
+            let receiver_output = receiver.recover_message(&sender_msg);
 
             if choice {
                 assert_eq!(receiver_output.o_b, sender_output.o_1);

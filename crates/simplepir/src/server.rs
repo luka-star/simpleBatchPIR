@@ -4,24 +4,31 @@ use shared::rings::{lift_matrix_to_zq, Zp, Zq};
 use std::num::Wrapping;
 
 use crate::types::{
-    BatchSimplePIRAnswer, BatchSimplePIRBucketOracle, BatchSimplePIRQuery, PBCConfig,
-    SimplePIRDatabase, SimplePIRHint, SimplePIRRecord, SimplePIRRecordAnswer, SimplePIRRecordQuery,
-    SimplePIRServerSetup,
+    BatchSimplePIRAnswer, BatchSimplePIRBucketOracle, BatchSimplePIRHint, BatchSimplePIRQuery,
+    PBCConfig, SimplePIRDatabase, SimplePIRHint, SimplePIRRecord, SimplePIRRecordAnswer,
+    SimplePIRRecordQuery,
 };
 
 pub struct SimplePIRServer {
     pub db: SimplePIRDatabase,
-    pub setup: SimplePIRServerSetup,
+    pub hint: SimplePIRHint,
+    db_lifted: Array2<Zq>,
 }
 
 impl SimplePIRServer {
     pub fn setup(db: SimplePIRDatabase) -> Self {
-        let setup = setup(&db);
-        Self { db, setup }
+        let matrix = compute_a(db.nrows());
+        let db_lifted = lift_matrix_to_zq(&db);
+        let hint = compute_hint(&db_lifted, &matrix);
+        Self {
+            db,
+            hint,
+            db_lifted,
+        }
     }
 
     pub fn hint(&self) -> &SimplePIRHint {
-        &self.setup.hint
+        &self.hint
     }
 
     pub fn square_n(&self) -> usize {
@@ -29,56 +36,46 @@ impl SimplePIRServer {
     }
 
     pub fn answer(&self, query: &SimplePIRRecordQuery) -> SimplePIRRecordAnswer {
-        answer_query(&self.db, query)
+        answer_query(&self.db_lifted, query)
     }
 }
 
 pub struct BatchSimplePIRServer {
-    pub setups: Vec<SimplePIRServerSetup>,
+    pub hints: BatchSimplePIRHint,
     pub position_map: BatchSimplePIRBucketOracle,
-    pub buckets: Vec<SimplePIRDatabase>,
+    pub lifted_buckets: Vec<Array2<Zq>>,
 }
 
 impl BatchSimplePIRServer {
     pub fn setup(db: &SimplePIRDatabase, record_cell_count: usize, config: &PBCConfig) -> Self {
-        let (setups, position_map, buckets) = setup_batching(db, record_cell_count, config);
+        let (hints, position_map, lifted_buckets) =
+            setup_batching(db, record_cell_count, config);
 
         Self {
-            setups,
+            hints,
             position_map,
-            buckets,
+            lifted_buckets,
         }
     }
 
-    pub fn bucket_element_counts(&self) -> Vec<usize> {
-        self.buckets.iter().map(|bucket| bucket.len()).collect()
+    pub fn bucket_size(&self) -> usize {
+        self.lifted_buckets.first().map(|bucket| bucket.len()).unwrap_or(0)
     }
 
     pub fn hints(&self) -> Vec<SimplePIRHint> {
-        self.setups.iter().map(|setup| setup.hint.clone()).collect()
+        self.hints.clone()
     }
 
     pub fn answer(&self, query: &BatchSimplePIRQuery) -> BatchSimplePIRAnswer {
-        let lifted_buckets: Vec<Array2<Zq>> = self.buckets.iter().map(lift_matrix_to_zq).collect();
-        batch_answer(query, &lifted_buckets)
+        batch_answer(query, &self.lifted_buckets)
     }
 }
 
-fn setup(db: &SimplePIRDatabase) -> SimplePIRServerSetup {
-    let nrows = db.nrows();
-    let matrix = compute_a(nrows);
-    setup_with_matrix(db, &matrix)
+fn compute_hint(db_lifted: &Array2<Zq>, matrix: &Array2<Zq>) -> SimplePIRHint {
+    db_lifted.dot(matrix)
 }
 
-fn setup_with_matrix(db: &SimplePIRDatabase, matrix: &Array2<Zq>) -> SimplePIRServerSetup {
-    let db_lifted = lift_matrix_to_zq(db);
-    let hint = db_lifted.dot(matrix);
-
-    SimplePIRServerSetup { hint }
-}
-
-fn answer_query(db: &SimplePIRDatabase, query: &SimplePIRRecordQuery) -> SimplePIRRecordAnswer {
-    let db_lifted = lift_matrix_to_zq(db);
+fn answer_query(db_lifted: &Array2<Zq>, query: &SimplePIRRecordQuery) -> SimplePIRRecordAnswer {
     query.iter().map(|q| db_lifted.dot(q)).collect()
 }
 
@@ -93,14 +90,13 @@ fn batch_answer(queries: &BatchSimplePIRQuery, buckets: &[Array2<Zq>]) -> BatchS
 fn batching_encode(
     records: &[SimplePIRRecord],
     config: &PBCConfig,
-) -> (Vec<SimplePIRDatabase>, BatchSimplePIRBucketOracle) {
+) -> (Vec<Vec<Zp>>, BatchSimplePIRBucketOracle) {
     let b = config.buckets;
     let w = config.w();
 
     let m = (records.len() * w) / b;
     let mut raw_buckets: Vec<Vec<SimplePIRRecord>> = vec![Vec::with_capacity(m); b];
     let mut position_map = BatchSimplePIRBucketOracle::new();
-
     for (record_id, record) in records.iter().enumerate() {
         let candidates = config.bucket_positions(&record_id);
         for &bucket_idx in &candidates {
@@ -112,7 +108,12 @@ fn batching_encode(
 
     let buckets = raw_buckets
         .iter()
-        .map(|bucket| records_to_matrix(bucket))
+        .map(|bucket| {
+            bucket
+                .iter()
+                .flat_map(|record| record.iter().copied())
+                .collect()
+        })
         .collect();
 
     (buckets, position_map)
@@ -120,26 +121,26 @@ fn batching_encode(
 
 fn setup_batching(
     db: &SimplePIRDatabase,
-    record_cell_count: usize,
+    record_size: usize,
     config: &PBCConfig,
 ) -> (
-    Vec<SimplePIRServerSetup>,
+    BatchSimplePIRHint,
     BatchSimplePIRBucketOracle,
-    Vec<SimplePIRDatabase>,
+    Vec<Array2<Zq>>,
 ) {
-    let records = database_records(db, record_cell_count);
+    let records = database_records(db, record_size);
     let (buckets, position_map) = batching_encode(&records, config);
-    let mut setup_res = Vec::with_capacity(buckets.len());
+    let mut hints = Vec::with_capacity(buckets.len());
     let padded_buckets = pad_buckets(buckets);
-
-    if let Some(first_bucket) = padded_buckets.first() {
+    let lifted_buckets: Vec<Array2<Zq>> = padded_buckets.iter().map(lift_matrix_to_zq).collect();
+    if let Some(first_bucket) = lifted_buckets.first() {
         let matrix = compute_a(first_bucket.nrows());
-        for bucket in &padded_buckets {
-            setup_res.push(setup_with_matrix(bucket, &matrix));
+        for bucket in &lifted_buckets {
+            hints.push(compute_hint(bucket, &matrix));
         }
     }
 
-    (setup_res, position_map, padded_buckets)
+    (hints, position_map, lifted_buckets)
 }
 
 fn database_records(db: &SimplePIRDatabase, record_cell_count: usize) -> Vec<SimplePIRRecord> {
@@ -154,22 +155,7 @@ fn database_records(db: &SimplePIRDatabase, record_cell_count: usize) -> Vec<Sim
         .collect()
 }
 
-fn records_to_matrix(records: &[SimplePIRRecord]) -> SimplePIRDatabase {
-    let mut flat: Vec<Zp> = records
-        .iter()
-        .flat_map(|record| record.iter().copied())
-        .collect();
-    let total_elements = flat.len();
-    let dim = if total_elements == 0 {
-        0
-    } else {
-        (total_elements as f64).sqrt().ceil() as usize
-    };
-    flat.resize(dim * dim, Wrapping(0));
-    Array2::from_shape_vec((dim, dim), flat).expect("failed to reshape records into matrix")
-}
-
-fn pad_buckets(buckets: Vec<SimplePIRDatabase>) -> Vec<SimplePIRDatabase> {
+fn pad_buckets(buckets: Vec<Vec<Zp>>) -> Vec<SimplePIRDatabase> {
     let max_size = buckets.iter().map(|bucket| bucket.len()).max().unwrap_or(0);
     let sqrt_size = if max_size == 0 {
         0
@@ -181,9 +167,8 @@ fn pad_buckets(buckets: Vec<SimplePIRDatabase>) -> Vec<SimplePIRDatabase> {
     buckets
         .into_iter()
         .map(|bucket| {
-            let flat: Vec<Zp> = bucket.iter().cloned().collect();
             let mut padded = vec![Wrapping(0); padded_size];
-            padded[..flat.len()].clone_from_slice(&flat);
+            padded[..bucket.len()].clone_from_slice(&bucket);
             Array2::from_shape_vec((sqrt_size, sqrt_size), padded).unwrap()
         })
         .collect()

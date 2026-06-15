@@ -1,28 +1,45 @@
-use crate::client::DEFAULT_M;
 use crate::ot::TreeOtSender;
-use crate::{encode_keyword, eval_keyword, MaskedKeyword, OprfError, OprfQuery, OprfResponse};
+use crate::{
+    eval_layer, masked_keyword_from_raw, permute_input, init_params, xor_into,
+    MaskedKeyword, OprfError, OprfKeywordResponse, OprfLayerResponse, OprfPublicParams, OprfQuery,
+    OprfResponse, PrfInput, DEFAULT_X_HAT_LEN,
+};
 use rand::{CryptoRng, RngCore};
 
-pub(crate) type GKey = [u8; 32];
+pub(crate) type RKEY = [u8; 32];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct OprfLayeRKEY {
+    pub row1: Vec<RKEY>,
+    pub row2: Vec<RKEY>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OprfKey {
-    pub row1: Vec<GKey>,
-    pub row2: Vec<GKey>,
+    pub params: OprfPublicParams,
+    pub layers: Vec<OprfLayeRKEY>,
 }
 
 #[derive(Debug, Clone)]
 pub struct OprfServer {
     key: OprfKey,
+    answered: bool,
 }
 
 impl OprfServer {
     pub fn setup(rng: &mut (impl RngCore + CryptoRng)) -> Self {
-        Self::new(keygen(DEFAULT_M, rng))
+        Self::new(keygen_with_params(init_params(rng), rng))
     }
 
     pub(crate) fn new(key: OprfKey) -> Self {
-        Self { key }
+        Self {
+            key,
+            answered: false,
+        }
+    }
+
+    pub fn public_params(&self) -> &OprfPublicParams {
+        &self.key.params
     }
 
     pub fn answer(
@@ -30,40 +47,72 @@ impl OprfServer {
         query: &OprfQuery,
         rng: &mut (impl RngCore + CryptoRng),
     ) -> Result<OprfResponse, OprfError> {
-        if self.key.row1.len() != self.key.row2.len() {
-            return Err(OprfError::MismatchedKeyRows);
+        if self.answered {
+            return Err(OprfError::AlreadyAnswered);
         }
-        if query.left.n != self.key.row1.len() || query.right.n != self.key.row2.len() {
-            return Err(OprfError::QueryShapeMismatch);
+        if query.queries.len() > self.key.params.max_queries {
+            return Err(OprfError::TooManyQueries);
         }
 
-        let left_messages = row_messages(&self.key.row1);
-        let right_messages = row_messages(&self.key.row2);
-        let left = TreeOtSender::respond(&left_messages, &query.left, rng)?;
-        let right = TreeOtSender::respond(&right_messages, &query.right, rng)?;
+        let mut responses = Vec::with_capacity(query.queries.len());
+        for keyword_query in &query.queries {
+            let mut layer_responses = Vec::with_capacity(keyword_query.layers.len());
+            for (layer_query, layer_key) in keyword_query.layers.iter().zip(&self.key.layers) {
+                let left_messages = row_messages(&layer_key.row1);
+                let right_messages = row_messages(&layer_key.row2);
+                let left = TreeOtSender::respond(&left_messages, &layer_query.left, rng);
+                let right = TreeOtSender::respond(&right_messages, &layer_query.right, rng);
+                layer_responses.push(OprfLayerResponse { left, right });
+            }
 
-        Ok(OprfResponse { left, right })
+            responses.push(OprfKeywordResponse {
+                layers: layer_responses,
+            });
+        }
+
+        self.answered = true;
+        Ok(OprfResponse { responses })
     }
 
-    pub fn mask_keyword(&self, keyword: &str, payload_len: usize) -> MaskedKeyword {
-        let input = encode_keyword(keyword, DEFAULT_M);
-        let (left_key, right_key) = (&self.key.row1[input.x1], &self.key.row2[input.x2]);
-        eval_keyword(left_key, right_key, input, payload_len)
+    pub fn mask_input(&self, base_input: PrfInput, payload_len: usize) -> MaskedKeyword {
+        let out_len = DEFAULT_X_HAT_LEN + payload_len;
+        let mut raw = vec![0u8; out_len];
+
+        for (layer_idx, layer_key) in self.key.layers.iter().enumerate() {
+            let input = permute_input(base_input, &self.key.params, layer_idx);
+            let layer = eval_layer(
+                &layer_key.row1[input.x1],
+                &layer_key.row2[input.x2],
+                input,
+                out_len,
+            );
+            xor_into(&mut raw, &layer);
+        }
+
+        masked_keyword_from_raw(raw)
     }
 }
 
-fn row_messages(row: &[GKey]) -> Vec<Vec<u8>> {
+fn row_messages(row: &[RKEY]) -> Vec<Vec<u8>> {
     row.iter().map(|key| key.to_vec()).collect()
 }
 
-pub(crate) fn keygen(m: usize, rng: &mut (impl RngCore + CryptoRng)) -> OprfKey {
+pub(crate) fn keygen_with_params(
+    params: OprfPublicParams,
+    rng: &mut (impl RngCore + CryptoRng),
+) -> OprfKey {
     OprfKey {
-        row1: sample_row(m, rng),
-        row2: sample_row(m, rng),
+        layers: (0..params.layers)
+            .map(|_| OprfLayeRKEY {
+                row1: sample_row(params.m, rng),
+                row2: sample_row(params.m, rng),
+            })
+            .collect(),
+        params,
     }
 }
 
-fn sample_row(m: usize, rng: &mut (impl RngCore + CryptoRng)) -> Vec<GKey> {
+fn sample_row(m: usize, rng: &mut (impl RngCore + CryptoRng)) -> Vec<RKEY> {
     (0..m)
         .map(|_| {
             let mut key = [0u8; 32];
@@ -71,4 +120,76 @@ fn sample_row(m: usize, rng: &mut (impl RngCore + CryptoRng)) -> Vec<GKey> {
             key
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::OprfKeywordQuery;
+    use rand::thread_rng;
+
+    #[test]
+    fn setup_samples_fresh_permutation_master_seed() {
+        let mut rng = thread_rng();
+        let first = OprfServer::setup(&mut rng);
+        let second = OprfServer::setup(&mut rng);
+
+        assert_ne!(
+            first.public_params().permutation_master_seed,
+            second.public_params().permutation_master_seed
+        );
+    }
+
+    #[test]
+    fn answer_rejects_more_than_max_queries() {
+        let mut rng = thread_rng();
+        let mut server = OprfServer::setup(&mut rng);
+        let query = OprfQuery {
+            queries: vec![
+                OprfKeywordQuery { layers: Vec::new() };
+                server.public_params().max_queries + 1
+            ],
+        };
+
+        assert_eq!(
+            server.answer(&query, &mut rng),
+            Err(OprfError::TooManyQueries)
+        );
+    }
+
+    #[test]
+    fn answer_rejects_reuse_after_success() {
+        let mut rng = thread_rng();
+        let mut server = OprfServer::setup(&mut rng);
+        let query = OprfQuery {
+            queries: Vec::new(),
+        };
+
+        assert!(server.answer(&query, &mut rng).is_ok());
+        assert_eq!(
+            server.answer(&query, &mut rng),
+            Err(OprfError::AlreadyAnswered)
+        );
+    }
+
+    #[test]
+    fn rejected_query_does_not_consume_server() {
+        let mut rng = thread_rng();
+        let mut server = OprfServer::setup(&mut rng);
+        let too_many = OprfQuery {
+            queries: vec![
+                OprfKeywordQuery { layers: Vec::new() };
+                server.public_params().max_queries + 1
+            ],
+        };
+        let valid = OprfQuery {
+            queries: Vec::new(),
+        };
+
+        assert_eq!(
+            server.answer(&too_many, &mut rng),
+            Err(OprfError::TooManyQueries)
+        );
+        assert!(server.answer(&valid, &mut rng).is_ok());
+    }
 }
